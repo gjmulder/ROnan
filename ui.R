@@ -22,6 +22,18 @@ shinyUI(fluidPage(
       start = "2016-01-01",
       end = "2016-12-31"
     ),
+    # actionButton(inputId = "redraw",
+    #              label = "Redraw"),
+    actionButton(inputId = "plus_hour",
+                 label = "+1 Hour"),
+    actionButton(inputId = "plus_day",
+                 label = "+1 Day"),
+    actionButton(inputId = "plus_week",
+                 label = "+1 Week"),
+    actionButton(inputId ="unzoom",
+                 label = "Unzoom"),
+    # actionButton(inputId ="toggle_log_scale",
+    #              label = "Toggle Log Scale"),
     selectInput(inputId = "time_series_name",
                 label = "Time Series",
                 choices = colnames(system_data)),
@@ -31,11 +43,11 @@ shinyUI(fluidPage(
   ),
   
   # 1. choose a time series
-  # 2. log or linear scale
-  # 3. double click to annotate with text
-  # 4. show annotations for the chosen time series
+  # 2. double click to annotate with text
+  # 3. show annotations for the chosen time series
+  # 4. move forward an hour / day / week / month
   
-  #  . move forward an hour / day / week / month
+  #  . log or linear scale
   #  . choose two time series
   #  . colour with a function (e.g. is.na())
   #  . geom_point or geom_line
