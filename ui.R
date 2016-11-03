@@ -36,9 +36,13 @@ shinyUI(fluidPage(
     #              label = "Toggle Log Scale"),
     selectInput(inputId = "time_series_name",
                 label = "Time Series",
-                choices = colnames(system_data)),
+                choices = colnames(ts_df)),
+    actionButton(inputId ="load_annotations",
+                 label = "Load Annotations"),
+    actionButton(inputId ="save_annotations",
+                 label = "Save Annotations"),
     textInput(inputId = "annotation_text",
-              label = "Annotation",
+              label = "Annotation Text",
               value = "anomaly")
   ),
   

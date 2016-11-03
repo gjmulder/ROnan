@@ -8,10 +8,15 @@
 #
 
 library(shiny)
-library(ggplot2)
-library(dplyr)
+library(tidyverse)
 
 load('~/Work/dataset1.Rdata')
+ts_df <-
+  system_data
+summary(ts_df)
+
+ts_annotations <-
+  NULL
 
 # define server logic required to draw the time series
 shinyServer(function(input, output) {
@@ -20,7 +25,8 @@ shinyServer(function(input, output) {
       start_date_time = min(system_data$date.time),
       old_start_date_time = min(system_data$date.time),
       end_date_time = max(system_data$date.time),
-      old_end_date_time = max(system_data$date.time)
+      old_end_date_time = max(system_data$date.time),
+      ts_annotations = list()
       # ,
       # y_log_axis = TRUE
     )
@@ -28,10 +34,11 @@ shinyServer(function(input, output) {
   plot_time_series <-
     function() {
       print("=====================================")
-      print(paste0("Start date : ", rv$start_date_time))
-      print(paste0("End date   : ", rv$end_date_time))
+      print(paste0("Time series: ", input$time_series_name))
+      print(paste0("Start date : ", strftime(rv$start_date_time, format = "%c")))
+      print(paste0("End date   : ", strftime(rv$end_date_time, format = "%c")))
       
-      system_data %>%
+      ts_df %>%
         filter(date.time >= rv$start_date_time &
                  date.time <= rv$end_date_time) %>%
         ggplot(aes_string(x = "date.time", y = input$time_series_name)) +
@@ -45,7 +52,7 @@ shinyServer(function(input, output) {
       # else
       #   gg + scale_y_continuous()
     }
-
+  
   observeEvent(input$date_range,
                {
                  print("Date range")
@@ -106,18 +113,41 @@ shinyServer(function(input, output) {
                })
   
   observeEvent(input$dbl_click, {
-    str(input$dbl_click)
-    print(paste0(
-      "Anomaly in ",
-      input$time_series_name,
-      " at ",
-      as.POSIXct(as.integer(input$dbl_click$x), origin = "1970-01-01"),
-      " labelled: >",
-      isolate(input$annotation_text),
-      "<"
-    ))
+    print(
+      paste0(
+        "Anomaly in ",
+        input$time_series_name,
+        " at ",
+        as.POSIXct(as.integer(input$dbl_click$x), origin = "1970-01-01"),
+        " labelled: >",
+        input$annotation_text,
+        "<"
+      )
+    )
+    rv$ts_annotations[[input$time_series_name]] <-
+      rbind(
+        rv$ts_annotations[[input$time_series_name]],
+        data_frame(
+          date.time = as.POSIXct(as.integer(input$dbl_click$x), origin = "1970-01-01"),
+          annotation = input$annotation_text
+        )
+      )
+    str(rv$ts_annotations)
   })
-
+  
+  observeEvent(input$load_annotations,
+               {
+                 load(file = "~/Work/ts_annotations.Rdata", verbose = TRUE)
+                 rv$ts_annotations <-
+                   ts_annotations
+               })
+  
+  observeEvent(input$save_annotations,
+               {
+                 ts_annotations <-
+                   rv$ts_annotations
+                 save(ts_annotations, file = "~/Work/ts_annotations.Rdata")
+               })
   
   # observeEvent(input$toggle_log_scale,
   #              {
@@ -127,11 +157,6 @@ shinyServer(function(input, output) {
   #              })
   
   output$time_series_plot <- renderPlot({
-    # str(input$date_range)
-    # str(input$dbl_click)
-    # str(input$plot_brush)
-    # str(input$time_series_name)
-    
     plot_time_series()
   })
 })
