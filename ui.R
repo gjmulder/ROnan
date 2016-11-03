@@ -16,9 +16,7 @@
 
 library(shiny)
 
-# Define UI for application that draws a histogram
 shinyUI(fluidPage(
-  # Application title
   titlePanel("ROnan - manual exploration of time series"),
   
   # The ggplot visualisation area
@@ -34,7 +32,7 @@ shinyUI(fluidPage(
   
   hr(),
   
-  # Sidebar with a slider input for number of bins
+  # We display the plots above the controls to maximise horizontal viewing area
   fluidRow(
     column(6,
       dateRangeInput(
