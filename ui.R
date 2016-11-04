@@ -37,9 +37,9 @@ shinyUI(fluidPage(
     column(6,
       dateRangeInput(
         inputId = "date_range",
-        label = "Specify a date range, or Click + Drag an area of the plot",
-        start = "2016-01-01",
-        end = "2016-12-31"
+        label = "Specify a date range, or select an area of the plot to zoom in",
+        start = min(ts_df$date.time),
+        end = max(ts_df$date.time)
       ),
       actionButton(inputId = "minus_hour",
                    label = "-1 Hour"),
@@ -60,20 +60,20 @@ shinyUI(fluidPage(
       selectInput(
         inputId = "time_series_name",
         label = "Time Series",
-        choices = colnames(ts_df[-1])
+        choices = colnames(ts_df[-1])[order(colnames(ts_df[-1]))]
+          
       ),
       selectInput(
         inputId = "annotation_text",
         label = "Annotation Text",
         choices = c(
-          "s_anom",
-          "e_anom",
-          "s_load",
-          "e_load",
-          "s_inc",
-          "e_inc",
-          "s_miss",
-          "e_miss"
+          "s_an",
+          "e_an",
+          "s_ld",
+          "e_ld",
+          "s_ms",
+          "e_ms",
+          "oops"
         )
       ),
       actionButton(inputId = "load_annotations",
