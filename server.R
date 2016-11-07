@@ -5,11 +5,6 @@
 library(shiny)
 library(tidyverse)
 
-load('~/Work/dataset1.Rdata')
-ts_df <-
-  system_data
-summary(ts_df)
-
 # Define server logic required to draw the time series
 shinyServer(function(input, output) {
   # TODO: Prompt user for data sources
@@ -52,7 +47,7 @@ shinyServer(function(input, output) {
         filter(date.time >= time_range$start &
                  date.time <= time_range$end)  %>%
         ggplot(aes_string(x = "date.time", y = input$time_series_name)) +
-        geom_point() ->
+        geom_line(size = 0.5) ->
         gg_plot
       
       # Add filtered annotations, if they exist
@@ -219,6 +214,7 @@ shinyServer(function(input, output) {
   observeEvent(input$load_annotations,
                {
                  load(file = "~/Work/ts_annotations.Rdata", verbose = TRUE)
+                 str(ts_annotations)
                  rv$ts_annotations <-
                    ts_annotations
                })
