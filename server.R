@@ -4,90 +4,14 @@
 
 library(shiny)
 library(tidyverse)
+library(googlesheets)
 
 ######################################################################################################
-# Load annotations from an .rdata file and save to individual .csv files
 
-annotations_to_gsheets <-
-  function(annotation_base_path, rdata_fname) {
-    load(file = rdata_fname, verbose = TRUE)
-    
-    write_annotation <-
-      function(ts_name,
-               annotation_base_path,
-               ts_annotations) {
-        ts_annotation <-
-          ts_annotations[[ts_name]]
-        ts_csv_fname <-
-          paste0(annotation_base_path,
-                 "ts_annotations_",
-                 ts_name,
-                 ".csv")
-        if (!file.exists(ts_csv_fname)) {
-          write_csv(ts_annotation[order(ts_annotation$date.time), ],
-                    path = ts_csv_fname)
-          paste0("Wrote: ",
-                 ts_name)
-        } else {
-          paste0("Not overwriting: ",
-                 ts_name)
-        }
-      }
-    
-    # Write each individual .csv file using the list names
-    lapply(names(ts_annotations),
-           write_annotation,
-           annotation_base_path,
-           ts_annotations)
-  }
 
 ######################################################################################################
-# Load individual .csv files and save annotations in an .rdata file
-
-gsheets_to_annotations <-
-  function(annotation_base_path, rdata_fname) {
-    if (!file.exists(rdata_fname)) {
-      fname_list <-
-        list.files(path = annotation_base_path,
-                   pattern = "ts_annotations_.*\\.csv$")
-      print(fname_list)
-      
-      # Read .csv files
-      ts_annotations <-
-        lapply(paste0(annotation_base_path, fname_list), read_csv)
-      
-      # Generate names for ts_annotation list
-      ts_names <-
-        lapply(fname_list, ts_name_from_fname) %>%
-        unlist
-      names(ts_annotations) <-
-        ts_names
-      
-      # Save .rdata file
-      str(ts_annotations)
-      save(ts_annotations, file = rdata_fname)
-      paste0("Saved files ",
-             fname_list,
-             " into ",
-             rdata_fname)
-      
-    } else {
-      paste0("Not overwriting: ",
-             rdata_fname)
-    }
-  }
-
 # Define server logic required to draw the time series
 shinyServer(function(input, output) {
-  # TODO: Prompt user for data sources
-  result <-
-    try(load(file = "~/Work/ts_annotations.Rdata", verbose = TRUE))
-  # str(result)
-  if (class(result) == 'try-error') {
-    ts_annotations <-
-      list()
-  }
-  
   # State for the UI
   rv <-
     reactiveValues(
@@ -96,7 +20,7 @@ shinyServer(function(input, output) {
         end = max(ts_df$date.time)
       ),
       undo_stack = list(),
-      ts_annotations = ts_annotations
+      ts_annotations = list()
       # ,
       # y_log_axis = TRUE
     )
@@ -282,21 +206,50 @@ shinyServer(function(input, output) {
     # str(rv$ts_annotations)
   })
   
-  # Load historical annotations
-  observeEvent(input$load_annotations,
+  # Load historical annotations from Google Sheets
+  observeEvent(input$load_annotation,
                {
-                 load(file = "~/Work/ts_annotations.Rdata", verbose = TRUE)
+                 ts_annotations <-
+                   rv$ts_annotations
+                 
+                 gsheet_ts_annotations <-
+                   googlesheets::gs_key(sheet_key)
+       
+                 print(gs_ws_ls(gsheet_ts_annotations))
+                 ts_annotations[[input$time_series_name]] <-
+                   gs_read(gsheet_ts_annotations,
+                           ws = input$time_series_name)
                  str(ts_annotations)
+                 
                  rv$ts_annotations <-
                    ts_annotations
                })
   
-  # Save current annotations
-  observeEvent(input$save_annotations,
+  # Save currently chosen annotation to Google Sheets using the ts_name as the worksheet name
+  observeEvent(input$save_annotation,
                {
                  ts_annotations <-
                    rv$ts_annotations
-                 save(ts_annotations, file = "~/Work/ts_annotations.Rdata")
+                 
+                 gsheet_ts_annotations <-
+                   googlesheets::gs_key(sheet_key)
+                 
+                 work_sheets <-
+                   gs_ws_ls(gsheet_ts_annotations)
+                 print(work_sheets)
+                 if (!input$time_series_name %in% work_sheets) {
+                   gs_ws_new(gsheet_ts_annotations,
+                             ws_title = input$time_series_name)
+                 }
+                 
+                 gs_edit_cells(
+                   gsheet_ts_annotations,
+                   ws = input$time_series_name,
+                   input = ts_annotations[[input$time_series_name]],
+                   col_names = TRUE,
+                   trim = TRUE,
+                   verbose = TRUE
+                 )
                })
   
   # observeEvent(input$toggle_log_scale,

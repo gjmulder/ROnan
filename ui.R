@@ -76,10 +76,10 @@ shinyUI(fluidPage(
           "oops"
         )
       ),
-      actionButton(inputId = "load_annotations",
-                   label = "Load Annotations"),
-      actionButton(inputId = "save_annotations",
-                   label = "Save Annotations")
+      actionButton(inputId = "load_annotation",
+                   label = "Load Annotation"),
+      actionButton(inputId = "save_annotation",
+                   label = "Save Annotation")
     )
   )
 ))
