@@ -41,12 +41,12 @@ shinyUI(fluidPage(
         start = min(ts_df$date.time),
         end = max(ts_df$date.time)
       ),
-      actionButton(inputId = "minus_hour",
-                   label = "-1 Hour"),
-      actionButton(inputId = "minus_day",
-                   label = "-1 Day"),
       actionButton(inputId = "minus_week",
                    label = "-1 Week"),
+      actionButton(inputId = "minus_day",
+                   label = "-1 Day"),
+      actionButton(inputId = "minus_hour",
+                   label = "-1 Hour"),
       actionButton(inputId = "plus_hour",
                    label = "+1 Hour"),
       actionButton(inputId = "plus_day",
@@ -71,8 +71,8 @@ shinyUI(fluidPage(
           "e_an",
           "s_ld",
           "e_ld",
-          "s_ms",
-          "e_ms",
+          "s_dt",
+          "e_dt",
           "oops"
         )
       ),
