@@ -35,11 +35,11 @@ setwd("~/Work/NAB/")
 # Get start and end of annotated anomalies
 ts_an_start <-
   ts_an %>%
-  filter(annotation == "s_an") %>%
+  filter(annotation == "s_an" | annotation == "s_dt" | annotation == "s_ld") %>%
   select(date.time)
 ts_an_end <-
   ts_an %>%
-  filter(annotation == "e_an") %>%
+  filter(annotation == "e_an" | annotation == "e_dt" | annotation == "e_ld") %>%
   select(date.time)
 
 # Compute subsequences
@@ -49,6 +49,8 @@ ts_an_subseq <-
   list()
 # TODO: This should be functionalised
 for (s_an_element in ts_an_start$date.time) {
+  print("")
+  
   previous_e_an_df <-
     ts_an_end %>%
     filter(date.time < s_an_element) %>%
@@ -58,29 +60,32 @@ for (s_an_element in ts_an_start$date.time) {
     previous_e_an_df$date.time
   start_e_an <-
     as.POSIXct(s_an_element, origin = "1970-01-01")
-  # print(paste('End last  :', previous_e_an))
-  # print(paste('Start new :', start_e_an))
+  print(paste('End last  :', previous_e_an))
+  print(paste('Start new :', start_e_an))
   
   time_diff_15pct <-
     start_e_an - previous_e_an
-  # print(paste0("15%: ", time_diff_15pct))
+  print(paste0("15%: ", time_diff_15pct))
   
   time_diff_85pct <-
     time_diff_15pct * 85 / 15
-  # print(paste0("85%: ", time_diff_85pct))
+  print(paste0("85%: ", time_diff_85pct))
   
   time_start <-
     previous_e_an
   time_end <-
     start_e_an + time_diff_85pct
   
-  if (time_end > max(ts$date.time))
-    next
+  # Use all of the time series, or if we need more than the time series, skip
+  if (time_end <= max(ts$date.time)) {
+    time_end <-
+      max(ts$date.time)
+  } else
+    break
   
   ts_subseq_name <-
     paste0(as.integer(time_start), "_", as.integer(time_end))
-  
-  print("")
+
   print(paste0("Start time  : ", time_start))
   print(paste0("First anom  : ", start_e_an))
   print(time_end - time_start)
