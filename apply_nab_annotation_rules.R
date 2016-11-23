@@ -16,7 +16,7 @@ library(jsonlite)
 # Get data and corresponding annotations for desktop.orders
 
 bst_start <-
-  as.POSIXct(strptime("2016-03-27 03:00:00", "%Y-%m-%d %H:%M:%S"))
+  as.POSIXct(strptime("2016-03-27 00:59:00", "%Y-%m-%d %H:%M:%S"))
 ts <-
   ts_df %>%
   filter(date.time > bst_start) %>%
@@ -26,8 +26,7 @@ ts <-
 ts_an <-
   gs_read(gsheet_ts_annotations,
           ws = "desktop.orders") %>%
-  filter(annotation == "s_an" | annotation == "e_an",
-         date.time > bst_start)
+  filter(date.time > bst_start)
   
 setwd("~/Work/NAB/")
 
@@ -76,12 +75,10 @@ for (s_an_element in ts_an_start$date.time) {
   time_end <-
     start_e_an + time_diff_85pct
   
-  # Use all of the time series, or if we need more than the time series, skip
-  if (time_end <= max(ts$date.time)) {
-    time_end <-
-      max(ts$date.time)
-  } else
+  if (time_end > max(ts$date.time)) {
+    print("Not enough time series left for 85% after probationary period, can't use")
     break
+  }
   
   ts_subseq_name <-
     paste0(as.integer(time_start), "_", as.integer(time_end))
@@ -99,7 +96,7 @@ for (s_an_element in ts_an_start$date.time) {
   
   ts_an_subseq[[ts_subseq_name]] <-
     ts_an %>%
-    filter(annotation == "s_an",
+    filter(annotation == "s_an" | annotation == "s_dt" | annotation == "s_ld",
            date.time >= time_start & date.time < time_end)
 }
 
@@ -141,5 +138,6 @@ save_to_nab_json <-
   }
 
 # Just write the first .csv and anom subseq
+print("Writing data. Make sure any old junk is deleted!")
 lapply(names(ts_subseq), save_to_nab_csv, ts_subseq)
 save_to_nab_json(ts_an_subseq)
