@@ -43,7 +43,8 @@ shinyServer(function(input, output) {
         filter(date.time >= time_range$start &
                  date.time <= time_range$end)  %>%
         ggplot(aes_string(x = "date.time", y = input$time_series_name)) +
-        geom_line(size = 0.5) ->
+        geom_line(size = 0.5) +
+        expand_limits(y = 0) ->
         gg_plot
       
       # Add filtered annotations, if they exist
@@ -214,7 +215,8 @@ shinyServer(function(input, output) {
                  
                  gsheet_ts_annotations <-
                    googlesheets::gs_key(sheet_key)
-       
+                 
+                 print(paste0("Loading:>", input$time_series_name, "<"))
                  print(gs_ws_ls(gsheet_ts_annotations))
                  ts_annotations[[input$time_series_name]] <-
                    gs_read(gsheet_ts_annotations,
