@@ -38,6 +38,7 @@ ts_name_from_fname <-
 ## if you version control your app, don't forget to ignore the token file!
 ## e.g., put it into .gitignore
 
+setwd("~/Work/ronan/")
 googlesheets::gs_auth(token = "shiny_app_google_sheet_token.rds")
 sheet_key <-
   "1D6nHybwCpanaw0pynRRWfFJ2QRtIMvIXw8rm2s0xGos"

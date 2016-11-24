@@ -1,6 +1,8 @@
-library(tidyverse)
+library(zoo)
 library(googlesheets)
 library(jsonlite)
+library(plyr)
+library(tidyverse)
 
 ######################################################################################################
 # Compute subsequences that meet criteria specified in
@@ -13,131 +15,138 @@ library(jsonlite)
 # 5.   15% + 85% = data set
 
 ######################################################################################################
-# Get data and corresponding annotations for desktop.orders
+# Get data and corresponding annotations for mobile.orders
 
+# Just look at daylight savings data as there's a problem with the timestamps being in BST
 bst_start <-
-  as.POSIXct(strptime("2016-03-27 00:59:00", "%Y-%m-%d %H:%M:%S"))
+  as.POSIXct(strptime("2016-03-27 04:00:00", "%Y-%m-%d %H:%M:%S"))
+
+# Get a time series and set all NAs to 0
 ts <-
   ts_df %>%
+  mutate(value = mobile.orders) %>%
   filter(date.time > bst_start) %>%
-  mutate(value = desktop.orders) %>%
+  mutate(value = ifelse(is.na(value), 0, value)) %>%
   select(date.time, value)
 
+# Get corresponding annotated labels, and pair the start and end times of each label
 ts_an <-
   gs_read(gsheet_ts_annotations,
-          ws = "desktop.orders") %>%
-  filter(date.time > bst_start)
-  
-setwd("~/Work/NAB/")
+          ws = "mobile.orders") %>%
+  filter(date.time > bst_start) %>%
+  select(-value) %>%
+  mutate(pairs = sort(rep(1:(nrow(.) / 2), 2))) %>%
+  spread(annotation, date.time)
 
 ######################################################################################################
-# Get start and end of annotated anomalies
-ts_an_start <-
+# Linearly interpolate human generated events only by setting the labelled time ranges to NA
+
+down_time_ranges <-
   ts_an %>%
-  filter(annotation == "s_an" | annotation == "s_dt" | annotation == "s_ld") %>%
-  select(date.time)
-ts_an_end <-
+  select(s_dt, e_dt) %>%
+  filter(complete.cases(.)) %>%
+  rowwise %>%
+  do(ranges = seq(.$s_dt - 60, .$e_dt, by = "min")) %>%
+  unlist %>%
+  as.POSIXct(origin = "1970-01-01")
+
+load_time_ranges <-
   ts_an %>%
-  filter(annotation == "e_an" | annotation == "e_dt" | annotation == "e_ld") %>%
-  select(date.time)
+  select(s_ld, e_ld) %>%
+  filter(complete.cases(.)) %>%
+  rowwise %>%
+  do(ranges = seq(.$s_ld - 60, .$e_ld, by = "min")) %>%
+  unlist %>%
+  as.POSIXct(origin = "1970-01-01")
 
-# Compute subsequences
-ts_subseq <-
-  list()
-ts_an_subseq <-
-  list()
-# TODO: This should be functionalised
-for (s_an_element in ts_an_start$date.time) {
-  print("")
-  
-  previous_e_an_df <-
-    ts_an_end %>%
-    filter(date.time < s_an_element) %>%
-    tail(1)
-  
-  previous_e_an <-
-    previous_e_an_df$date.time
-  start_e_an <-
-    as.POSIXct(s_an_element, origin = "1970-01-01")
-  print(paste('End last  :', previous_e_an))
-  print(paste('Start new :', start_e_an))
-  
-  time_diff_15pct <-
-    start_e_an - previous_e_an
-  print(paste0("15%: ", time_diff_15pct))
-  
-  time_diff_85pct <-
-    time_diff_15pct * 85 / 15
-  print(paste0("85%: ", time_diff_85pct))
-  
-  time_start <-
-    previous_e_an
-  time_end <-
-    start_e_an + time_diff_85pct
-  
-  if (time_end > max(ts$date.time)) {
-    print("Not enough time series left for 85% after probationary period, can't use")
-    break
-  }
-  
-  ts_subseq_name <-
-    paste0(as.integer(time_start), "_", as.integer(time_end))
+ts$value[ts$date.time %in% c(down_time_ranges, load_time_ranges)] <-
+  NA
+ts$value <-
+  na.approx(ts$value)
 
-  print(paste0("Start time  : ", time_start))
-  print(paste0("First anom  : ", start_e_an))
-  print(time_end - time_start)
-  print(paste0("End time    : ", time_end))
-  print(paste0("File name   : ", ts_subseq_name))
+######################################################################################################
+# Create subranges of time series using start and end of anomalies
 
-  ts_subseq[[ts_subseq_name]] <-
-    ts %>%
-    filter(date.time >= time_start & date.time <= time_end)
-  print(paste0("Number rows: ", nrow(ts_subseq[[ts_subseq_name]])))
-  
-  ts_an_subseq[[ts_subseq_name]] <-
-    ts_an %>%
-    filter(annotation == "s_an" | annotation == "s_dt" | annotation == "s_ld",
-           date.time >= time_start & date.time < time_end)
-}
+real_an <-
+  ts_an %>%
+  select(s_an, e_an) %>%
+  filter(complete.cases(.))
+
+subset_an_ranges <-
+  data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1],   # end of last anomaly
+             start.an = real_an$s_an[2:nrow(real_an)]) %>%          # start of next anomaly
+  mutate(probationary.15pct.range = start.an - start.date.time) %>%
+  mutate(detect.85pct.range = probationary.15pct.range * 85 / 15) %>%
+  mutate(end.date.time = start.an + detect.85pct.range) %>%
+  filter(end.date.time <= max(ts$date.time))
 
 ######################################################################################################
 # Output data as .csv and annotations as NAB json labels
+
 save_to_nab_csv <-
-  function(ts_name, ts_subseq) {
-    # Format timestamps, set all NAs = 0.0
-    sub_seq <-
-      ts_subseq[[ts_name]]
+  function(start_date_time, end_date_time, ts) {
     csv_data <-
-      sub_seq %>%
-      mutate(
-        timestamp = strftime(date.time, format = "%F %T"),
-        value = ifelse(is.na(value), 0, value)
-      ) %>%
+      ts %>%
+      filter(date.time > start_date_time & date.time < end_date_time) %>%
+      mutate(timestamp = strftime(date.time, format = "%F %T")) %>%
       select(timestamp, value)
     
     # Write .csv
     nab_data_fname <-
-      paste0("dataSet/", ts_name, ".csv")
-    write_csv(csv_data, path = paste0("./data/", nab_data_fname))
+      paste0(
+        "./data/dataSet/",
+        as.integer(start_date_time),
+        "_",
+        as.integer(end_date_time),
+        ".csv"
+      )
+    write_csv(csv_data, path = nab_data_fname)
   }
 
 save_to_nab_json <-
-  function(ts_an_subseq) {
-    ts_an <-
-      lapply(ts_an_subseq, function(x) {x$date.time})
-    names(ts_an) <-
-      lapply(names(ts_an_subseq), function(x) paste0("dataSet/", x, ".csv"))
-
+  function(subset_an_ranges, real_an)
+  {
+    create_json_array <-
+      function(an_range, real_an) {
+          real_an %>%
+          filter(s_an > an_range$start.date.time & s_an < an_range$end.date.time) %>%
+          select(s_an) %>%
+          unlist %>%
+          unname %>%
+          as.POSIXct(origin = "1970-01-01")
+      }
+    
+    an_lists <-
+      alply(.data = subset_an_ranges, .margins = 1, .fun = create_json_array, real_an)
+    
+    an_lists_names <-
+      subset_an_ranges %>%
+      rowwise %>%
+      do(
+      as_data_frame(paste0("dataSet/",
+        as.integer(.$start.date.time),
+        "_",
+        as.integer(.$end.date.time),
+        ".csv")))
+    names(an_lists) <-
+      an_lists_names$value
+    
     # Write JSON anomalies
     nab_label_fname <-
       "./labels/raw/GM_dataSet_labels_v0.1.json"
     fc <-
       file(nab_label_fname)
-    writeLines(toJSON(ts_an), fc)
+    writeLines(toJSON(an_lists), fc)
     close(fc)
   }
 
-# Just write the first .csv and anom subseq
 print("Writing data. Make sure any old junk is deleted!")
-lapply(names(ts_subseq), save_to_nab_csv, ts_subseq)
-save_to_nab_json(ts_an_subseq)
+setwd("~/Work/NAB/")
+
+# Create .csv data files
+subset_an_ranges %>%
+  rowwise %>%
+  do(ts_range = save_to_nab_csv(.$start.date.time, .$end.date.time, ts))
+
+# Create raw label .json
+save_to_nab_json(subset_an_ranges, real_an)
