@@ -1,4 +1,4 @@
-# Shuny UI design for Time Series visualiastion and annotation
+# Shiny UI design for Time Series visualiastion and annotation
 #
 # Version 0.2 - Gary Mulder - 03/11/2016
 

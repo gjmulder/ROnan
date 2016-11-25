@@ -19,12 +19,12 @@ library(tidyverse)
 
 # Just look at daylight savings data as there's a problem with the timestamps being in BST
 bst_start <-
-  as.POSIXct(strptime("2016-03-27 04:00:00", "%Y-%m-%d %H:%M:%S"))
+  as.POSIXct(strptime("2016-03-27 10:00:00", "%Y-%m-%d %H:%M:%S"))
 
 # Get a time series and set all NAs to 0
 ts <-
   ts_df %>%
-  mutate(value = mobile.orders) %>%
+  mutate(value = desktop.orders) %>%
   filter(date.time > bst_start) %>%
   mutate(value = ifelse(is.na(value), 0, value)) %>%
   select(date.time, value)
@@ -32,14 +32,15 @@ ts <-
 # Get corresponding annotated labels, and pair the start and end times of each label
 ts_an <-
   gs_read(gsheet_ts_annotations,
-          ws = "mobile.orders") %>%
+          ws = "desktop.orders") %>%
   filter(date.time > bst_start) %>%
   select(-value) %>%
   mutate(pairs = sort(rep(1:(nrow(.) / 2), 2))) %>%
   spread(annotation, date.time)
 
 ######################################################################################################
-# Linearly interpolate human generated events only by setting the labelled time ranges to NA
+# Linearly interpolate human generated events (down time and load) and morning hours
+# by setting the labelled time ranges to NA
 
 down_time_ranges <-
   ts_an %>%
@@ -60,6 +61,14 @@ load_time_ranges <-
   as.POSIXct(origin = "1970-01-01")
 
 ts$value[ts$date.time %in% c(down_time_ranges, load_time_ranges)] <-
+  NA
+ts$value <-
+  na.approx(ts$value)
+
+quiet_time_ranges <-
+  data_frame(date.time = seq(min(ts$date.time), max(ts$date.time), by = "min")) %>%
+  filter(as.integer(strftime(date.time, format = "%H")) %in% 0:8)
+ts$value[ts$date.time %in% quiet_time_ranges$date.time] <-
   NA
 ts$value <-
   na.approx(ts$value)
@@ -108,7 +117,7 @@ save_to_nab_json <-
   {
     create_json_array <-
       function(an_range, real_an) {
-          real_an %>%
+        real_an %>%
           filter(s_an > an_range$start.date.time & s_an < an_range$end.date.time) %>%
           select(s_an) %>%
           unlist %>%
@@ -123,11 +132,11 @@ save_to_nab_json <-
       subset_an_ranges %>%
       rowwise %>%
       do(
-      as_data_frame(paste0("dataSet/",
-        as.integer(.$start.date.time),
-        "_",
-        as.integer(.$end.date.time),
-        ".csv")))
+        as_data_frame(paste0("dataSet/",
+                             as.integer(.$start.date.time),
+                             "_",
+                             as.integer(.$end.date.time),
+                             ".csv")))
     names(an_lists) <-
       an_lists_names$value
     
@@ -149,4 +158,5 @@ subset_an_ranges %>%
   do(ts_range = save_to_nab_csv(.$start.date.time, .$end.date.time, ts))
 
 # Create raw label .json
-save_to_nab_json(subset_an_ranges, real_an)
+subset_an_ranges %>%
+  save_to_nab_json(real_an)
