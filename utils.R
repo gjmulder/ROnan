@@ -3,51 +3,6 @@ library(googlesheets)
 library(jsonlite)
 
 ######################################################################################################
-# Load time series data
-
-load('~/Work/DS/dataset1.Rdata')
-ts_df <-
-  system_data
-summary(ts_df)
-
-annotation_base_path <-
-  "~/Work/DS_annotations/"
-
-ts_name_from_fname <-
-  function(fname) {
-    # "ts_annotations_.*.csv
-    substr(fname, 16, nchar(fname) - 4)
-  }
-
-######################################################################################################
-# Google Sheets preparation
-# n <- 5
-# filler <- matrix("-", nrow = n, ncol = n,
-#                  dimnames = list(NULL, paste0("V", seq_len(n))))
-
-## prepare the OAuth token and set up the target sheet:
-##  - do this interactively
-##  - do this EXACTLY ONCE
-
-# shiny_token <- gs_auth() # authenticate w/ your desired Google identity here
-# saveRDS(shiny_token, "shiny_app_google_sheet_token.rds")
-# ss <- gs_new("ts_annotations",
-#              row_extent = n, col_extent = n, input = filler)
-# ss$sheet_key # 1D6nHybwCpanaw0pynRRWfFJ2QRtIMvIXw8rm2s0xGos
-
-## if you version control your app, don't forget to ignore the token file!
-## e.g., put it into .gitignore
-
-setwd("~/Work/ronan/")
-googlesheets::gs_auth(token = "shiny_app_google_sheet_token.rds")
-sheet_key <-
-  "1D6nHybwCpanaw0pynRRWfFJ2QRtIMvIXw8rm2s0xGos"
-gsheet_ts_annotations <-
-  googlesheets::gs_key(sheet_key)
-
-print(gs_ws_ls(gsheet_ts_annotations))
-
-######################################################################################################
 # Load annotations from an .rdata file and save to individual .csv files
 
 annotations_to_csv <-

@@ -1,13 +1,10 @@
-# Shiny server interface for Time Series visualiastion and annotation
+# Shiny server interface for NAB Results visualisation
 #
-# Version 0.2 - Gary Mulder - 03/11/2016
+# Version 0.1 - Gary Mulder - 25/11/2016
 
 library(shiny)
 library(tidyverse)
 library(googlesheets)
-
-######################################################################################################
-
 
 ######################################################################################################
 # Define server logic required to draw the time series
