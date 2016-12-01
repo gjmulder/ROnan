@@ -2,6 +2,11 @@ library(tidyverse)
 library(googlesheets)
 library(jsonlite)
 
+# load('~/Work/DS/dataset1.Rdata')
+ts_df <-
+  clean_ts_df
+summary(ts_df)
+  
 ######################################################################################################
 # Load annotations from an .rdata file and save to individual .csv files
 

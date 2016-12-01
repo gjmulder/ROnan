@@ -29,12 +29,15 @@ clean_ts_data <-
     # Linearly interpolate human generated events (down time and load) by setting the labeled time ranges to NA
     # Also linearly interpolate the noisy quiet morning hours (00:00 to 08:59)
     
+    dst_offset <-
+      60 * 60
+    
     down_time_ranges <-
       ts_an %>%
       select(s_dt, e_dt) %>%
       filter(complete.cases(.)) %>%
       rowwise %>%
-      do(ranges = seq(.$s_dt - 60, .$e_dt, by = "min")) %>%
+      do(ranges = seq(.$s_dt + dst_offset, .$e_dt + dst_offset, by = "min")) %>%
       unlist %>%
       as.POSIXct(origin = "1970-01-01")
     
@@ -43,7 +46,7 @@ clean_ts_data <-
       select(s_ld, e_ld) %>%
       filter(complete.cases(.)) %>%
       rowwise %>%
-      do(ranges = seq(.$s_ld - 60, .$e_ld, by = "min")) %>%
+      do(ranges = seq(.$s_ld + dst_offset, .$e_ld + dst_offset, by = "min")) %>%
       unlist %>%
       as.POSIXct(origin = "1970-01-01")
     
@@ -76,7 +79,7 @@ write_NAB_sebsequences <-
     subset_an_ranges <-
       data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1],
                  # end of last anomaly
-                 start.an = real_an$s_an[2:nrow(real_an)]) %>%          # start of next anomaly
+                 start.an = real_an$s_an[2:nrow(real_an)]) %>%             # start of next anomaly
       mutate(probationary.15pct.range = start.an - start.date.time) %>%
       mutate(detect.85pct.range = probationary.15pct.range * 85 / 15) %>%
       mutate(end.date.time = start.an + detect.85pct.range) %>%
@@ -196,9 +199,18 @@ get_labels_from_google_sheets <-
     print(gs_ws_ls(gsheet_ts_annotations))
     
     # Get corresponding annotated labels, and pair the start and end times of each label
+    gs_annotations <-
+      gs_read(gsheet_ts_annotations, ws = ts_name)
+    if (typeof(gs_annotations$date.time) == "character") {
+      gs_annotations$date.time <-
+        as.POSIXct(strptime(gs_annotations$date.time, "%d/%m/%Y %H:%M:%S"))
+    }
+    if (typeof(gs_annotations$date.time) == "double") {
+      gs_annotations$date.time <-
+        as.POSIXct(gs_annotations$date.time)
+    }
     
-    gs_read(gsheet_ts_annotations,
-            ws = ts_name) %>%
+    gs_annotations %>%
       filter(date.time > bst_start) %>%
       select(-value) %>%
       mutate(pairs = sort(rep(1:(nrow(
@@ -220,42 +232,45 @@ summary(ts_df)
 bst_start <-
   as.POSIXct(strptime("2016-03-27 10:00:00", "%Y-%m-%d %H:%M:%S"))
 
-# ######################################################################################################
-# # Get labels, clean ts, write ts subsequences and labels to NAB .csvs
-# 
-# ts_name <-
-#   "mobile.orders.vs.reqs"
-# 
-# ts_an <-
-#   get_labels_from_google_sheets("mobile.orders", bst_start)
-#
-# ts_df %>%
-#   mutate(value = mobile.orders / mobile.reqs) %>%
-#   select(date.time, value) %>%
-#   clean_ts_data(ts_an, bst_start) %>%
-#   write_NAB_sebsequences(ts_name, ts_an)
-
 ######################################################################################################
-# Clean all columns of ts_df using combined order labels
+# Get labels, clean ts, write ts subsequences and labels to NAB .csvs
+
+ts_name <-
+  "mobile.orders.vs.reqs"
 
 ts_an <-
-  get_labels_from_google_sheets("combined.orders", bst_start)
+  get_labels_from_google_sheets("mobile.orders", bst_start)
 
-combine_clean_ts_data <-
-  function(value, date_time, ts_an, bst_start) {
-    data_frame(date.time = date_time, value = value) %>%
-      clean_ts_data(ts_an, bst_start) %>%
-      select(value)
-  }
+ts_df %>%
+  mutate(value = mobile.orders / mobile.reqs) %>%
+  select(date.time, value) %>%
+  clean_ts_data(ts_an, bst_start) %>%
+  write_NAB_sebsequences(ts_name, ts_an)
 
-clean_ts_df <-
-  ts_df %>%
-  colwise(.fun = combine_clean_ts_data,
-          .cols = names(ts_df)[-1],
-          .$date.time,
-          ts_an,
-          bst_start) %>%
-  mutate(date.time = ts_df$date.time)
-
-names(clean_ts_df) <-
-  names(ts_df)
+# ######################################################################################################
+# # Clean all columns of ts_df using combined order labels
+# 
+# ts_an <-
+#   get_labels_from_google_sheets("combined.orders", bst_start)
+# 
+# combine_clean_ts_data <-
+#   function(col_name, ts_df, ts_an, bst_start) {
+#     ts_df[, c("date.time", col_name)] %>%
+#       setNames(c("date.time", "value")) %>%
+#       clean_ts_data(ts_an, bst_start) %>%
+#       setNames(c("date.time.dupe", col_name))
+#   }
+# 
+# clean_ts_df <-
+#   names(ts_df[, -1]) %>%
+#   lapply(
+#     combine_clean_ts_data,
+#     ts_df,
+#     ts_an,
+#     bst_start
+#   ) %>%
+#   bind_cols
+# clean_ts_df[duplicated(names(clean_ts_df))] <-
+#   NULL
+# colnames(clean_ts_df)[1] <-
+#   "date.time"
