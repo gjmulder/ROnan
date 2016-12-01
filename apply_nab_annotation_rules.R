@@ -52,13 +52,13 @@ clean_ts_data <-
     ts$value <-
       na.approx(ts$value)
     
-    quiet_time_ranges <-
-      data_frame(date.time = seq(min(ts$date.time), max(ts$date.time), by = "min")) %>%
-      filter(as.integer(strftime(date.time, format = "%H")) %in% 0:8)
-    ts$value[ts$date.time %in% quiet_time_ranges$date.time] <-
-      NA
-    ts$value <-
-      na.approx(ts$value)
+    # quiet_time_ranges <-
+    #   data_frame(date.time = seq(min(ts$date.time), max(ts$date.time), by = "min")) %>%
+    #   filter(as.integer(strftime(date.time, format = "%H")) %in% 0:8)
+    # ts$value[ts$date.time %in% quiet_time_ranges$date.time] <-
+    #   NA
+    # ts$value <-
+    #   na.approx(ts$value)
     
     ts
   }
@@ -74,7 +74,8 @@ write_NAB_sebsequences <-
       filter(complete.cases(.))
     
     subset_an_ranges <-
-      data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1],   # end of last anomaly
+      data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1],
+                 # end of last anomaly
                  start.an = real_an$s_an[2:nrow(real_an)]) %>%          # start of next anomaly
       mutate(probationary.15pct.range = start.an - start.date.time) %>%
       mutate(detect.85pct.range = probationary.15pct.range * 85 / 15) %>%
@@ -88,7 +89,8 @@ write_NAB_sebsequences <-
       function(start_date_time, end_date_time, ts) {
         csv_data <-
           ts %>%
-          filter(date.time > start_date_time & date.time < end_date_time) %>%
+          filter(date.time > start_date_time &
+                   date.time < end_date_time) %>%
           mutate(timestamp = strftime(date.time, format = "%F %T")) %>%
           select(timestamp, value)
         
@@ -112,27 +114,37 @@ write_NAB_sebsequences <-
         create_json_array <-
           function(an_range, real_an) {
             real_an %>%
-              filter(s_an > an_range$start.date.time & s_an < an_range$end.date.time) %>%
-              select(s_an) %>%
+              filter(s_an > an_range$start.date.time &
+                       s_an < an_range$end.date.time) %>%
+              mutate(mid_an = round((
+                as.integer(s_an) / 2 + as.integer(e_an) / 2
+              ) / 60) * 60) %>%
+              select(mid_an) %>%
               unlist %>%
               unname %>%
               as.POSIXct(origin = "1970-01-01")
           }
         
         an_lists <-
-          alply(.data = subset_an_ranges, .margins = 1, .fun = create_json_array, real_an)
+          alply(.data = subset_an_ranges,
+                .margins = 1,
+                .fun = create_json_array,
+                real_an)
         
         an_lists_names <-
           subset_an_ranges %>%
           rowwise %>%
-          do(
-            as_data_frame(paste0("dataSet/",
-                                 ts_name,
-                                 "_",
-                                 as.integer(.$start.date.time),
-                                 "_",
-                                 as.integer(.$end.date.time),
-                                 ".csv")))
+          do(as_data_frame(
+            paste0(
+              "dataSet/",
+              ts_name,
+              "_",
+              as.integer(.$start.date.time),
+              "_",
+              as.integer(.$end.date.time),
+              ".csv"
+            )
+          ))
         names(an_lists) <-
           an_lists_names$value
         
@@ -189,7 +201,9 @@ get_labels_from_google_sheets <-
             ws = ts_name) %>%
       filter(date.time > bst_start) %>%
       select(-value) %>%
-      mutate(pairs = sort(rep(1:(nrow(.) / 2), 2))) %>%
+      mutate(pairs = sort(rep(1:(nrow(
+        .
+      ) / 2), 2))) %>%
       spread(annotation, date.time)
   }
 
@@ -206,17 +220,42 @@ summary(ts_df)
 bst_start <-
   as.POSIXct(strptime("2016-03-27 10:00:00", "%Y-%m-%d %H:%M:%S"))
 
-######################################################################################################
-# Get labels, clean ts, write ts subsequences and labels to NAB .csvs
+# ######################################################################################################
+# # Get labels, clean ts, write ts subsequences and labels to NAB .csvs
+# 
+# ts_name <-
+#   "mobile.orders.vs.reqs"
+# 
+# ts_an <-
+#   get_labels_from_google_sheets("mobile.orders", bst_start)
+#
+# ts_df %>%
+#   mutate(value = mobile.orders / mobile.reqs) %>%
+#   select(date.time, value) %>%
+#   clean_ts_data(ts_an, bst_start) %>%
+#   write_NAB_sebsequences(ts_name, ts_an)
 
-ts_name <-
-  "mobile.orders.vs.reqs"
+######################################################################################################
+# Clean all columns of ts_df using combined order labels
 
 ts_an <-
-  get_labels_from_google_sheets("mobile.orders", bst_start)
+  get_labels_from_google_sheets("combined.orders", bst_start)
 
-ts_df %>%
-  mutate(value = mobile.orders / mobile.reqs) %>%
-  select(date.time, value) %>%
-  clean_ts_data(ts_an, bst_start) %>%
-  write_NAB_sebsequences(ts_name, ts_an)
+combine_clean_ts_data <-
+  function(value, date_time, ts_an, bst_start) {
+    data_frame(date.time = date_time, value = value) %>%
+      clean_ts_data(ts_an, bst_start) %>%
+      select(value)
+  }
+
+clean_ts_df <-
+  ts_df %>%
+  colwise(.fun = combine_clean_ts_data,
+          .cols = names(ts_df)[-1],
+          .$date.time,
+          ts_an,
+          bst_start) %>%
+  mutate(date.time = ts_df$date.time)
+
+names(clean_ts_df) <-
+  names(ts_df)
