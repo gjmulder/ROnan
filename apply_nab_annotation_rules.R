@@ -154,7 +154,9 @@ write_NAB_sebsequences <-
         
         # Write JSON anomalies
         nab_label_fname <-
-          "./labels/raw/GM_dataSet_labels_v0.2.json"
+          paste0("./labels/raw/GM_",
+                 ts_name,
+                 "_labels_v0.2.json")
         fc <-
           file(nab_label_fname)
         writeLines(toJSON(an_lists), fc)
@@ -191,7 +193,7 @@ write_NAB_sebsequences <-
 # e.g., put it into .gitignore
 
 get_labels_from_google_sheets <-
-  function(ts_name, dst_start) {
+  function(ts_name, ts_start) {
     googlesheets::gs_auth(token = "~/Work/ronan/shiny_app_google_sheet_token.rds")
     sheet_key <-
       "1D6nHybwCpanaw0pynRRWfFJ2QRtIMvIXw8rm2s0xGos"
@@ -212,7 +214,7 @@ get_labels_from_google_sheets <-
     }
     
     gs_annotations %>%
-      filter(date.time > dst_start) %>%
+      filter(date.time > ts_start) %>%
       select(-value) %>%
       mutate(pairs = sort(rep(1:(nrow(
         .
@@ -237,23 +239,23 @@ ts_start <-
 # Get labels, clean ts, write ts subsequences and labels to NAB .csvs
 
 ts_name <-
-  "desktop.orders.vs.reqs"
+  "mobile.orders.vs.reqs"
 
 ts_an <-
-  get_labels_from_google_sheets("desktop.orders", ts_start)
+  get_labels_from_google_sheets("mobile.orders", ts_start)
 
 ts_df %>%
-  mutate(value = desktop.orders / desktop.reqs) %>%
+  mutate(value = mobile.orders / mobile.reqs) %>%
   select(date.time, value) %>%
   clean_ts_data(ts_an, ts_start) %>%
   write_NAB_sebsequences(ts_name, ts_an)
 
 # ######################################################################################################
 # # Clean all columns of ts_df using combined order labels
-# 
+#
 # ts_an <-
 #   get_labels_from_google_sheets("combined.orders", ts_start)
-# 
+#
 # combine_clean_ts_data <-
 #   function(col_name, ts_df, ts_an, ts_start) {
 #     ts_df[, c("date.time", col_name)] %>%
@@ -261,7 +263,7 @@ ts_df %>%
 #       clean_ts_data(ts_an, dst_start) %>%
 #       setNames(c("date.time.dupe", col_name))
 #   }
-# 
+#
 # clean_ts_df <-
 #   names(ts_df[, -1]) %>%
 #   lapply(

@@ -207,17 +207,28 @@ shinyServer(function(input, output) {
   # Load historical annotations from Google Sheets
   observeEvent(input$load_annotation,
                {
+                 print(paste0("Loading:>", input$time_series_name, "<"))
+                 
                  ts_annotations <-
                    rv$ts_annotations
                  
                  gsheet_ts_annotations <-
                    googlesheets::gs_key(sheet_key)
-                 
-                 print(paste0("Loading:>", input$time_series_name, "<"))
                  print(gs_ws_ls(gsheet_ts_annotations))
+                 
                  ts_annotations[[input$time_series_name]] <-
                    gs_read(gsheet_ts_annotations,
                            ws = input$time_series_name)
+                 
+                 print(typeof(ts_annotations[[input$time_series_name]]$date.time))
+                 if (typeof(ts_annotations[[input$time_series_name]]$date.time) == "character") {
+                   ts_annotations[[input$time_series_name]]$date.time <-
+                     as.POSIXct(strptime(ts_annotations[[input$time_series_name]]$date.time, "%d/%m/%Y %H:%M:%S", tz = "GMT"))
+                 }
+                 if (typeof(ts_annotations[[input$time_series_name]]$date.time) == "double") {
+                   ts_annotations[[input$time_series_name]]$date.time <-
+                     as.POSIXct(ts_annotations[[input$time_series_name]]$date.time)
+                 }
                  str(ts_annotations)
                  
                  rv$ts_annotations <-

@@ -15,7 +15,7 @@ ts_df <-
 # ts_df <-
 #   clean_ts_df
 
-summary(ts_df)
+print(summary(ts_df))
 
 ######################################################################################################
 # Google Sheets preparation
@@ -76,3 +76,39 @@ annotations_to_csv <-
            annotation_base_path,
            ts_annotations)
   }
+
+###################################################################################################
+# Generate some reoccuring labels
+# start_7am_an <-
+#   data_frame(date.time = seq(as.POSIXct(strptime("01/04/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
+#                              as.POSIXct(strptime("10/08/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
+#                              by = "min"),
+#              value = pi,
+#              annotation = "s_dt") %>%
+#   filter(strftime(date.time, format = "%H") == "07") %>%
+#   filter(strftime(date.time, format = "%M") == "00")
+# 
+# end_7am_an <-
+#   data_frame(date.time = seq(as.POSIXct(strptime("01/04/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
+#                              as.POSIXct(strptime("10/08/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
+#                              by = "min"),
+#              value = pi,
+#              annotation = "e_dt") %>%
+#   filter(strftime(date.time, format = "%H") == "07") %>%
+#   filter(strftime(date.time, format = "%M") == "35")
+# 
+# all_an <-
+#   bind_rows(start_7am_an,
+#             end_7am_an) %>%
+#   arrange(date.time)
+# 
+# ts_name <-
+#   "mobile.reqs.new"
+# gs_edit_cells(
+#   gsheet_ts_annotations,
+#   ws = ts_name,
+#   input = all_an,
+#   col_names = TRUE,
+#   trim = TRUE,
+#   verbose = TRUE
+# )
