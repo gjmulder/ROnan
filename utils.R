@@ -44,41 +44,9 @@ gsheet_ts_annotations <-
 
 print(gs_ws_ls(gsheet_ts_annotations))
 
-annotations_to_csv <-
-  function(annotation_base_path, rdata_fname) {
-    load(file = rdata_fname, verbose = TRUE)
-    
-    write_annotation <-
-      function(ts_name,
-               annotation_base_path,
-               ts_annotations) {
-        ts_annotation <-
-          ts_annotations[[ts_name]]
-        ts_csv_fname <-
-          paste0(annotation_base_path,
-                 "ts_annotations_",
-                 ts_name,
-                 ".csv")
-        if (!file.exists(ts_csv_fname)) {
-          write_csv(ts_annotation[order(ts_annotation$date.time), ],
-                    path = ts_csv_fname)
-          paste0("Wrote: ",
-                 ts_name)
-        } else {
-          paste0("Not overwriting: ",
-                 ts_name)
-        }
-      }
-    
-    # Write each individual .csv file using the list names
-    lapply(names(ts_annotations),
-           write_annotation,
-           annotation_base_path,
-           ts_annotations)
-  }
-
 ###################################################################################################
 # Generate some reoccuring labels
+#
 # start_7am_an <-
 #   data_frame(date.time = seq(as.POSIXct(strptime("01/04/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
 #                              as.POSIXct(strptime("10/08/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
@@ -112,3 +80,10 @@ annotations_to_csv <-
 #   trim = TRUE,
 #   verbose = TRUE
 # )
+
+###################################################################################################
+# Export for Anton
+#
+# tses <- c("date.time", "desktop.reqs", "mobile.reqs", "desktop.orders", "mobile.orders")
+# system_data_ts <- system_data[, tses]
+# system_data_clean_ts <- clean_ts_df[, tses]

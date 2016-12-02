@@ -5,30 +5,22 @@ library(plyr)
 library(tidyverse)
 
 ######################################################################################################
+#
+# Clean data using s_dt/e_dt and s_ld/e_ld labels to linearly interpolate human anomalies
+#
 # Compute subsequences that meet criteria specified in
 # https://drive.google.com/file/d/0B1_XUjaAXeV3YlgwRXdsb3Voa1k/vie
 
-# 1. For each start of anomaly
-# 2.   Find start or previous end of anomaly
-# 3.   This time range is 15% of data
-# 4.   Take 85% of data after start of anomaly
-# 5.   15% + 85% = data set
-
-######################################################################################################
-# Get data and corresponding annotations for mobile.orders
-
 clean_ts_data <-
   function(ts_df, ts_an, dst_start) {
+    # Linearly interpolate any human generated events (downtime and load) by setting the labeled time
+    # ranges to NA.
+    
     # Get a time series and set all NAs to 0
     ts <-
       ts_df %>%
       filter(date.time > dst_start) %>%
       mutate(value = ifelse(is.na(value), 0, value))
-    
-    ######################################################################################################
-    # Linearly interpolate human generated events (down time and load) by setting the labeled time ranges
-    # to NA. Start label is at the first anomalous data point so we want to interpolate from the prior
-    # "good" data point.
     
     dst_offset <-
       60 * 60
@@ -77,28 +69,10 @@ clean_ts_data <-
     ts
   }
 
-write_NAB_sebsequences <-
+# Create subranges of time series using start and end of anomalies
+write_nab_sebsequences <-
   function(ts, ts_name, ts_an) {
-    ######################################################################################################
-    # Create subranges of time series using start and end of anomalies
-    
-    real_an <-
-      ts_an %>%
-      select(s_an, e_an) %>%
-      filter(complete.cases(.))
-    
-    subset_an_ranges <-
-      data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1],
-                 # end of last anomaly
-                 start.an = real_an$s_an[2:nrow(real_an)]) %>%             # start of next anomaly
-      mutate(probationary.15pct.range = start.an - start.date.time) %>%
-      mutate(detect.85pct.range = probationary.15pct.range * 85 / 15) %>%
-      mutate(end.date.time = start.an + detect.85pct.range) %>%
-      filter(end.date.time <= max(ts$date.time))
-    
-    ######################################################################################################
     # Output data as .csv and annotations as NAB json labels
-    
     save_to_nab_csv <-
       function(start_date_time, end_date_time, ts) {
         csv_data <-
@@ -107,6 +81,8 @@ write_NAB_sebsequences <-
                    date.time < end_date_time) %>%
           mutate(timestamp = strftime(date.time, format = "%F %T")) %>%
           select(timestamp, value)
+        
+        summary(csv_data)
         
         # Write .csv
         nab_data_fname <-
@@ -173,6 +149,29 @@ write_NAB_sebsequences <-
         close(fc)
       }
     
+    # Get non-human anomailes
+    real_an <-
+      ts_an %>%
+      select(s_an, e_an) %>%
+      filter(complete.cases(.))
+    
+    # Get subranges based on anomalies, minimum 14 days in length
+    #
+    # 1. For each start of anomaly
+    # 2.   Find start or previous end of anomaly
+    # 3.   This time range is 15% of data
+    # 4.   Take 85% of data after start of anomaly
+    # 5.   15% + 85% = time series subset
+    
+    subset_an_ranges <-
+      data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1],      # end of last anomaly
+                 start.an = real_an$s_an[2:nrow(real_an)]) %>%             # start of next anomaly
+      mutate(probationary.15pct.range = start.an - start.date.time) %>%
+      mutate(detect.85pct.range = probationary.15pct.range * 85 / 15) %>%
+      mutate(end.date.time = start.an + detect.85pct.range) %>%
+      filter(end.date.time <= max(ts$date.time)) %>%
+      filter((end.date.time - start.date.time) > as.difftime(14, units = "days"))
+   
     print("Writing data. Make sure any old junk is deleted!")
     setwd("~/Work/NAB/")
     
@@ -213,10 +212,12 @@ get_labels_from_google_sheets <-
     # Get corresponding annotated labels, and pair the start and end times of each label
     gs_annotations <-
       gs_read(gsheet_ts_annotations, ws = ts_name)
-    Sys.sleep(60)
+    
+    # Sleep to prevent "Too Many Requests (RFC 6585) (HTTP 429)" from GSheets
+    Sys.sleep(5)
     if (typeof(gs_annotations$date.time) == "character") {
       gs_annotations$date.time <-
-        as.POSIXct(strptime(gs_annotations$date.time, "%d/%m/%Y %H:%M:%S"))
+        as.POSIXct(strptime(gs_annotations$date.time, "%d/%m/%Y %H:%M:%S", tz = "GMT"))
     }
     if (typeof(gs_annotations$date.time) == "double") {
       gs_annotations$date.time <-
@@ -240,28 +241,13 @@ ts_df <-
   system_data
 summary(ts_df)
 
+######################################################################################################
+# Clean all columns of ts_df using combined order labels
+
 # Just look at daylight savings data as there's a problem with the timestamps being in BST
 # Also, we need a time later in the morning so that na.approx has a value to start approximating from.
 ts_start <-
   as.POSIXct(strptime("2016-03-27 10:00:00", "%Y-%m-%d %H:%M:%S"))
-
-# ######################################################################################################
-# # Get labels, clean ts, write ts subsequences and labels to NAB .csvs
-# 
-# ts_name <-
-#   "mobile.orders.vs.reqs"
-# 
-# ts_an <-
-#   get_labels_from_google_sheets("mobile.orders", ts_start)
-# 
-# ts_df %>%
-#   mutate(value = mobile.orders / mobile.reqs) %>%
-#   select(date.time, value) %>%
-#   clean_ts_data(ts_an, ts_start) %>%
-#   write_NAB_sebsequences(ts_name, ts_an)
-
-######################################################################################################
-# Clean all columns of ts_df using combined order labels
 
 clean_ts <-
   function(col_name, ts_df, ts_start) {
@@ -284,3 +270,32 @@ clean_ts_df[duplicated(names(clean_ts_df))] <-
   NULL
 colnames(clean_ts_df)[1] <-
   "date.time"
+
+######################################################################################################
+# Generate ratios of orders vs. reqs and write tio NAB .csv's
+
+# Mobile
+ts_name <-
+  "mobile.orders.vs.reqs"
+ts_an <-
+  bind_rows(get_labels_from_google_sheets("mobile.orders", ts_start),
+            get_labels_from_google_sheets("mobile.reqs", ts_start)) %>%
+  arrange(s_an, s_dt, s_ld)
+
+clean_ts_df %>%
+  mutate(value = mobile.orders / mobile.reqs) %>%
+  select(date.time, value) %>%
+  write_nab_sebsequences(ts_name, ts_an)
+
+# Desktop
+ts_name <-
+  "desktop.orders.vs.reqs"
+ts_an <-
+  bind_rows(get_labels_from_google_sheets("desktop.orders", ts_start),
+            get_labels_from_google_sheets("desktop.reqs", ts_start)) %>%
+  arrange(s_an, s_dt, s_ld)
+
+clean_ts_df %>%
+  mutate(value = desktop.orders / desktop.reqs) %>%
+  select(date.time, value) %>%
+  write_nab_sebsequences(ts_name, ts_an)
