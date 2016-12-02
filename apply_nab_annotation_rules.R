@@ -33,6 +33,7 @@ clean_ts_data <-
     dst_offset <-
       60 * 60
     
+    if ("s_dt" %in% names(ts_an)) {
     down_time_ranges <-
       ts_an %>%
       select(s_dt, e_dt) %>%
@@ -41,7 +42,12 @@ clean_ts_data <-
       do(ranges = seq(.$s_dt - 60 + dst_offset, .$e_dt + dst_offset, by = "min")) %>%
       unlist %>%
       as.POSIXct(origin = "1970-01-01")
-    
+    } else {
+      down_time_ranges <-
+        NULL
+    }
+
+    if ("s_ld" %in% names(ts_an)) {
     load_time_ranges <-
       ts_an %>%
       select(s_ld, e_ld) %>%
@@ -50,6 +56,10 @@ clean_ts_data <-
       do(ranges = seq(.$s_ld - 60 + dst_offset, .$e_ld + dst_offset, by = "min")) %>%
       unlist %>%
       as.POSIXct(origin = "1970-01-01")
+    } else {
+      load_time_ranges <-
+        NULL
+    }
     
     ts$value[ts$date.time %in% c(down_time_ranges, load_time_ranges)] <-
       NA
@@ -199,11 +209,11 @@ get_labels_from_google_sheets <-
       "1D6nHybwCpanaw0pynRRWfFJ2QRtIMvIXw8rm2s0xGos"
     gsheet_ts_annotations <-
       googlesheets::gs_key(sheet_key)
-    print(gs_ws_ls(gsheet_ts_annotations))
     
     # Get corresponding annotated labels, and pair the start and end times of each label
     gs_annotations <-
       gs_read(gsheet_ts_annotations, ws = ts_name)
+    Sys.sleep(60)
     if (typeof(gs_annotations$date.time) == "character") {
       gs_annotations$date.time <-
         as.POSIXct(strptime(gs_annotations$date.time, "%d/%m/%Y %H:%M:%S"))
@@ -235,45 +245,42 @@ summary(ts_df)
 ts_start <-
   as.POSIXct(strptime("2016-03-27 10:00:00", "%Y-%m-%d %H:%M:%S"))
 
-######################################################################################################
-# Get labels, clean ts, write ts subsequences and labels to NAB .csvs
-
-ts_name <-
-  "mobile.orders.vs.reqs"
-
-ts_an <-
-  get_labels_from_google_sheets("mobile.orders", ts_start)
-
-ts_df %>%
-  mutate(value = mobile.orders / mobile.reqs) %>%
-  select(date.time, value) %>%
-  clean_ts_data(ts_an, ts_start) %>%
-  write_NAB_sebsequences(ts_name, ts_an)
-
 # ######################################################################################################
-# # Clean all columns of ts_df using combined order labels
-#
+# # Get labels, clean ts, write ts subsequences and labels to NAB .csvs
+# 
+# ts_name <-
+#   "mobile.orders.vs.reqs"
+# 
 # ts_an <-
-#   get_labels_from_google_sheets("combined.orders", ts_start)
-#
-# combine_clean_ts_data <-
-#   function(col_name, ts_df, ts_an, ts_start) {
-#     ts_df[, c("date.time", col_name)] %>%
-#       setNames(c("date.time", "value")) %>%
-#       clean_ts_data(ts_an, dst_start) %>%
-#       setNames(c("date.time.dupe", col_name))
-#   }
-#
-# clean_ts_df <-
-#   names(ts_df[, -1]) %>%
-#   lapply(
-#     combine_clean_ts_data,
-#     ts_df,
-#     ts_an,
-#     ts_start
-#   ) %>%
-#   bind_cols
-# clean_ts_df[duplicated(names(clean_ts_df))] <-
-#   NULL
-# colnames(clean_ts_df)[1] <-
-#   "date.time"
+#   get_labels_from_google_sheets("mobile.orders", ts_start)
+# 
+# ts_df %>%
+#   mutate(value = mobile.orders / mobile.reqs) %>%
+#   select(date.time, value) %>%
+#   clean_ts_data(ts_an, ts_start) %>%
+#   write_NAB_sebsequences(ts_name, ts_an)
+
+######################################################################################################
+# Clean all columns of ts_df using combined order labels
+
+clean_ts <-
+  function(col_name, ts_df, ts_start) {
+    # For a given ts in ts_df, apply the cleaning process using Google labels, and return a cleaned ts
+    ts_df[, c("date.time", col_name)] %>%
+      setNames(c("date.time", "value")) %>%
+      clean_ts_data(get_labels_from_google_sheets(col_name, ts_start), ts_start) %>%
+      setNames(c("date.time.dupe", col_name))
+  }
+
+clean_ts_df <-
+  names(ts_df[, -1]) %>%
+  lapply(
+    clean_ts,
+    ts_df,
+    ts_start
+  ) %>%
+  bind_cols
+clean_ts_df[duplicated(names(clean_ts_df))] <-
+  NULL
+colnames(clean_ts_df)[1] <-
+  "date.time"
