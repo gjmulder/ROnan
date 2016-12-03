@@ -13,7 +13,7 @@ options(warn = 0)
 # Compute subsequences that meet criteria specified in
 # https://drive.google.com/file/d/0B1_XUjaAXeV3YlgwRXdsb3Voa1k/vie
 
-clean_ts_data <-
+clean_ts <-
   function(ts_df, ts_an, dst_start) {
     # Linearly interpolate any human generated events (downtime and load) by setting the labeled time
     # ranges to NA.
@@ -201,7 +201,7 @@ write_nab_sebsequences <-
 get_labels_from_google_sheets <-
   function(ts_name, ts_start) {
     # Get corresponding annotated labels, and pair the start and end times of each label
-    Sys.sleep(6) # prevent "Too Many Requests (RFC 6585) (HTTP 429)" from GSheets
+    Sys.sleep(7) # prevent "Too Many Requests (RFC 6585) (HTTP 429)" from GSheets
     gs_annotations <-
       gs_read(gsheet_ts_annotations, ws = ts_name)
     
@@ -245,19 +245,19 @@ gsheet_ts_annotations <-
 ts_start <-
   as.POSIXct(strptime("2016-02-25 15:00:00", "%Y-%m-%d %H:%M:%S", tz = "Europe/London"))
 
-clean_ts <-
+build_and_clean_ts <-
   function(col_name, ts_df, ts_start) {
     # For a given ts in ts_df, apply the cleaning process using Google labels, and return a cleaned ts
     ts_df[, c("date.time", col_name)] %>%
       setNames(c("date.time", "value")) %>%
-      clean_ts_data(get_labels_from_google_sheets(col_name, ts_start),
+      clean_ts(get_labels_from_google_sheets(col_name, ts_start),
                     ts_start) %>%
       setNames(c("date.time.dupe", col_name))
   }
 
 clean_ts_df <-
   names(ts_df[,-1]) %>%
-  lapply(clean_ts,
+  lapply(build_and_clean_ts,
          ts_df,
          ts_start) %>%
   bind_cols
@@ -267,14 +267,16 @@ colnames(clean_ts_df)[1] <-
   "date.time"
 
 ######################################################################################################
-# Generate ratios of orders vs. reqs and write tio NAB .csv's
+# Generate ratios of orders vs. reqs and write to NAB .csv's
 
 setwd("~/Work/NAB/")
 unlink(
   c(
     "./data/dataSet/*csv",
     "./data/labels/*json",
-    "./data/labels/raw/*json"
+    "./data/labels/raw/*json",
+    "./results/twitterADTs/dataSet/*.csv",
+    "./results/twitterADVec/dataSet/*.csv"
   ),
   force = TRUE
 )
@@ -287,10 +289,13 @@ ts_an <-
     get_labels_from_google_sheets("mobile.orders", ts_start),
     get_labels_from_google_sheets("mobile.reqs", ts_start)
   ) %>%
+  # get_labels_from_google_sheets("mobile.orders", ts_start) %.%
   arrange(s_an, s_dt, s_ld)
 
 clean_ts_df %>%
   mutate(value = mobile.orders / mobile.reqs) %>%
+  mutate(value = ifelse(is.nan(value) | is.infinite(value), 0.0, value)) %>%  # Handle division by 0
+  mutate(value = ifelse(value > 0.05, 0.05, value)) %>%                       # Cap ratios at 0.05 to prevent float overflow
   select(date.time, value) %>%
   write_nab_sebsequences(ts_name, ts_an)
 
@@ -302,9 +307,12 @@ ts_an <-
     get_labels_from_google_sheets("desktop.orders", ts_start),
     get_labels_from_google_sheets("desktop.reqs", ts_start)
   ) %>%
+  # get_labels_from_google_sheets("desktop.orders", ts_start) %>%
   arrange(s_an, s_dt, s_ld)
 
 clean_ts_df %>%
   mutate(value = desktop.orders / desktop.reqs) %>%
+  mutate(value = ifelse(is.nan(value) | is.infinite(value), 0.0, value)) %>%  # Handle division by 0
+  mutate(value = ifelse(value > 0.05, 0.05, value)) %>%                       # Cap ratios at 0.05 to prevent float overflow
   select(date.time, value) %>%
   write_nab_sebsequences(ts_name, ts_an)
