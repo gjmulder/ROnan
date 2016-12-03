@@ -30,8 +30,8 @@ shinyServer(function(input, output) {
       
       message("=====================================")
       message("Time series: ", input$time_series_name)
-      message("Start date : ", strftime(time_range$start, format = "%c"))
-      message("End date   : ", strftime(time_range$end, format = "%c"))
+      message("Start date : ", strftime(time_range$start, format = "%c", tz = "Europe/London"))
+      message("End date   : ", strftime(time_range$end, format = "%c", tz = "Europe/London"))
       
       # str(ts_df)
       # str(rv$time_range)
@@ -70,6 +70,7 @@ shinyServer(function(input, output) {
       #   gg + scale_y_continuous()
     }
   
+  ##############################################
   # UI event state changes we need to handle
   
   # Choose a date range
@@ -223,7 +224,7 @@ shinyServer(function(input, output) {
                  print(typeof(ts_annotations[[input$time_series_name]]$date.time))
                  if (typeof(ts_annotations[[input$time_series_name]]$date.time) == "character") {
                    ts_annotations[[input$time_series_name]]$date.time <-
-                     as.POSIXct(strptime(ts_annotations[[input$time_series_name]]$date.time, "%d/%m/%Y %H:%M:%S", tz = "GMT"))
+                     as.POSIXct(strptime(ts_annotations[[input$time_series_name]]$date.time, "%d/%m/%Y %H:%M:%S", tz = "Europe/London"))
                  }
                  if (typeof(ts_annotations[[input$time_series_name]]$date.time) == "double") {
                    ts_annotations[[input$time_series_name]]$date.time <-

@@ -4,6 +4,8 @@ library(jsonlite)
 library(plyr)
 library(tidyverse)
 
+options(warn = 0)
+
 ######################################################################################################
 #
 # Clean data using s_dt/e_dt and s_ld/e_ld labels to linearly interpolate human anomalies
@@ -22,16 +24,13 @@ clean_ts_data <-
       filter(date.time > dst_start) %>%
       mutate(value = ifelse(is.na(value), 0, value))
     
-    dst_offset <-
-      60 * 60
-    
     if ("s_dt" %in% names(ts_an)) {
     down_time_ranges <-
       ts_an %>%
       select(s_dt, e_dt) %>%
       filter(complete.cases(.)) %>%
       rowwise %>%
-      do(ranges = seq(.$s_dt - 60 + dst_offset, .$e_dt + dst_offset, by = "min")) %>%
+      do(ranges = seq(.$s_dt - 60, .$e_dt, by = "min")) %>%
       unlist %>%
       as.POSIXct(origin = "1970-01-01")
     } else {
@@ -45,7 +44,7 @@ clean_ts_data <-
       select(s_ld, e_ld) %>%
       filter(complete.cases(.)) %>%
       rowwise %>%
-      do(ranges = seq(.$s_ld - 60 + dst_offset, .$e_ld + dst_offset, by = "min")) %>%
+      do(ranges = seq(.$s_ld - 60, .$e_ld, by = "min")) %>%
       unlist %>%
       as.POSIXct(origin = "1970-01-01")
     } else {
@@ -60,7 +59,7 @@ clean_ts_data <-
     
     # quiet_time_ranges <-
     #   data_frame(date.time = seq(min(ts$date.time), max(ts$date.time), by = "min")) %>%
-    #   filter(as.integer(strftime(date.time, format = "%H")) %in% 0:8)
+    #   filter(as.integer(strftime(date.time, format = "%H", tz = "Europe/London")) %in% 0:8)
     # ts$value[ts$date.time %in% quiet_time_ranges$date.time] <-
     #   NA
     # ts$value <-
@@ -79,7 +78,7 @@ write_nab_sebsequences <-
           ts %>%
           filter(date.time > start_date_time &
                    date.time < end_date_time) %>%
-          mutate(timestamp = strftime(date.time, format = "%F %T")) %>%
+          mutate(timestamp = strftime(date.time, format = "%F %T", tz = "Europe/London")) %>%
           select(timestamp, value)
         
         summary(csv_data)
@@ -205,7 +204,7 @@ get_labels_from_google_sheets <-
   function(ts_name, ts_start) {
     googlesheets::gs_auth(token = "~/Work/ronan/shiny_app_google_sheet_token.rds")
     sheet_key <-
-      "1D6nHybwCpanaw0pynRRWfFJ2QRtIMvIXw8rm2s0xGos"
+      "1Y8MoUBi1CtzLNv0b_VPQS3MTAeapRE9ep5_7cMTnJUE"
     gsheet_ts_annotations <-
       googlesheets::gs_key(sheet_key)
     
@@ -217,7 +216,7 @@ get_labels_from_google_sheets <-
     Sys.sleep(5)
     if (typeof(gs_annotations$date.time) == "character") {
       gs_annotations$date.time <-
-        as.POSIXct(strptime(gs_annotations$date.time, "%d/%m/%Y %H:%M:%S", tz = "GMT"))
+        as.POSIXct(strptime(gs_annotations$date.time, "%d/%m/%Y %H:%M:%S", tz = "Europe/London"))
     }
     if (typeof(gs_annotations$date.time) == "double") {
       gs_annotations$date.time <-
@@ -244,10 +243,8 @@ summary(ts_df)
 ######################################################################################################
 # Clean all columns of ts_df using combined order labels
 
-# Just look at daylight savings data as there's a problem with the timestamps being in BST
-# Also, we need a time later in the morning so that na.approx has a value to start approximating from.
 ts_start <-
-  as.POSIXct(strptime("2016-03-27 10:00:00", "%Y-%m-%d %H:%M:%S"))
+  as.POSIXct(strptime("2016-02-25 15:00:00", "%Y-%m-%d %H:%M:%S", tz = "Europe/London"))
 
 clean_ts <-
   function(col_name, ts_df, ts_start) {

@@ -11,11 +11,11 @@ load('~/Work/DS/dataset1.Rdata')
 ts_df <-
   system_data
 
-# Cleaned system data
+# # Cleaned system data
 # ts_df <-
 #   clean_ts_df
-
-print(summary(ts_df))
+# 
+# print(summary(ts_df))
 
 ######################################################################################################
 # Google Sheets preparation
@@ -31,14 +31,14 @@ print(summary(ts_df))
 # saveRDS(shiny_token, "shiny_app_google_sheet_token.rds")
 # ss <- gs_new("ts_annotations",
 #              row_extent = n, col_extent = n, input = filler)
-# ss$sheet_key # 1D6nHybwCpanaw0pynRRWfFJ2QRtIMvIXw8rm2s0xGos
+# ss$sheet_key # 1Y8MoUBi1CtzLNv0b_VPQS3MTAeapRE9ep5_7cMTnJUE
 
 ## if you version control your app, don't forget to ignore the token file!
 ## e.g., put it into .gitignore
 
 googlesheets::gs_auth(token = "~/Work/ronan/shiny_app_google_sheet_token.rds")
 sheet_key <-
-  "1D6nHybwCpanaw0pynRRWfFJ2QRtIMvIXw8rm2s0xGos"
+  "1Y8MoUBi1CtzLNv0b_VPQS3MTAeapRE9ep5_7cMTnJUE"
 gsheet_ts_annotations <-
   googlesheets::gs_key(sheet_key)
 
@@ -48,8 +48,8 @@ print(gs_ws_ls(gsheet_ts_annotations))
 # Generate some reoccuring labels
 #
 # start_7am_an <-
-#   data_frame(date.time = seq(as.POSIXct(strptime("01/04/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
-#                              as.POSIXct(strptime("10/08/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
+#   data_frame(date.time = seq(as.POSIXct(strptime("01/04/2016 00:00:00", "%d/%m/%Y %H:%M:%S", tz = "Europe/London")),
+#                              as.POSIXct(strptime("10/08/2016 00:00:00", "%d/%m/%Y %H:%M:%S", tz = "Europe/London")),
 #                              by = "min"),
 #              value = pi,
 #              annotation = "s_dt") %>%
@@ -57,13 +57,13 @@ print(gs_ws_ls(gsheet_ts_annotations))
 #   filter(strftime(date.time, format = "%M") == "00")
 # 
 # end_7am_an <-
-#   data_frame(date.time = seq(as.POSIXct(strptime("01/04/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
-#                              as.POSIXct(strptime("10/08/2016 00:00:00", "%d/%m/%Y %H:%M:%S")),
+#   data_frame(date.time = seq(as.POSIXct(strptime("01/04/2016 00:00:00", "%d/%m/%Y %H:%M:%S", tz = "Europe/London")),
+#                              as.POSIXct(strptime("10/08/2016 00:00:00", "%d/%m/%Y %H:%M:%S", tz = "Europe/London")),
 #                              by = "min"),
 #              value = pi,
 #              annotation = "e_dt") %>%
-#   filter(strftime(date.time, format = "%H") == "07") %>%
-#   filter(strftime(date.time, format = "%M") == "35")
+#   filter(strftime(date.time, format = "%H") == "07", tz = "Europe/London") %>%
+#   filter(strftime(date.time, format = "%M") == "35", tz = "Europe/London")
 # 
 # all_an <-
 #   bind_rows(start_7am_an,
