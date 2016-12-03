@@ -6,16 +6,16 @@ library(jsonlite)
 # Load annotations from an .rdata file 
 # Assign whatever source data frame we want to examine to ts_df
 
-# System data
-load('~/Work/DS/dataset1.Rdata')
-ts_df <-
-  system_data
-
-# # Cleaned system data
+# # System data
+# load('~/Work/DS/dataset1.Rdata')
 # ts_df <-
-#   clean_ts_df
-# 
-# print(summary(ts_df))
+#   system_data
+
+# Cleaned system data
+ts_df <-
+  clean_ts_df
+
+print(summary(ts_df))
 
 ######################################################################################################
 # Google Sheets preparation

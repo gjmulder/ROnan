@@ -25,28 +25,28 @@ clean_ts_data <-
       mutate(value = ifelse(is.na(value), 0, value))
     
     if ("s_dt" %in% names(ts_an)) {
-    down_time_ranges <-
-      ts_an %>%
-      select(s_dt, e_dt) %>%
-      filter(complete.cases(.)) %>%
-      rowwise %>%
-      do(ranges = seq(.$s_dt - 60, .$e_dt, by = "min")) %>%
-      unlist %>%
-      as.POSIXct(origin = "1970-01-01")
+      down_time_ranges <-
+        ts_an %>%
+        select(s_dt, e_dt) %>%
+        filter(complete.cases(.)) %>%
+        rowwise %>%
+        do(ranges = seq(.$s_dt - 60, .$e_dt, by = "min")) %>%
+        unlist %>%
+        as.POSIXct(origin = "1970-01-01")
     } else {
       down_time_ranges <-
         NULL
     }
-
+    
     if ("s_ld" %in% names(ts_an)) {
-    load_time_ranges <-
-      ts_an %>%
-      select(s_ld, e_ld) %>%
-      filter(complete.cases(.)) %>%
-      rowwise %>%
-      do(ranges = seq(.$s_ld - 60, .$e_ld, by = "min")) %>%
-      unlist %>%
-      as.POSIXct(origin = "1970-01-01")
+      load_time_ranges <-
+        ts_an %>%
+        select(s_ld, e_ld) %>%
+        filter(complete.cases(.)) %>%
+        rowwise %>%
+        do(ranges = seq(.$s_ld - 60, .$e_ld, by = "min")) %>%
+        unlist %>%
+        as.POSIXct(origin = "1970-01-01")
     } else {
       load_time_ranges <-
         NULL
@@ -163,23 +163,21 @@ write_nab_sebsequences <-
     # 5.   15% + 85% = time series subset
     
     subset_an_ranges <-
-      data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1],      # end of last anomaly
+      data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1],
+                 # end of last anomaly
                  start.an = real_an$s_an[2:nrow(real_an)]) %>%             # start of next anomaly
       mutate(probationary.15pct.range = start.an - start.date.time) %>%
       mutate(detect.85pct.range = probationary.15pct.range * 85 / 15) %>%
       mutate(end.date.time = start.an + detect.85pct.range) %>%
       filter(end.date.time <= max(ts$date.time)) %>%
       filter((end.date.time - start.date.time) > as.difftime(14, units = "days"))
-   
-    print("Writing data. Make sure any old junk is deleted!")
-    setwd("~/Work/NAB/")
     
-    # Create .csv data files
+    # Write .csv data files
     subset_an_ranges %>%
       rowwise %>%
       do(ts_range = save_to_nab_csv(.$start.date.time, .$end.date.time, ts))
     
-    # Create raw label .json
+    # Write raw label .json
     subset_an_ranges %>%
       save_to_nab_json(real_an)
   }
@@ -202,18 +200,11 @@ write_nab_sebsequences <-
 
 get_labels_from_google_sheets <-
   function(ts_name, ts_start) {
-    googlesheets::gs_auth(token = "~/Work/ronan/shiny_app_google_sheet_token.rds")
-    sheet_key <-
-      "1Y8MoUBi1CtzLNv0b_VPQS3MTAeapRE9ep5_7cMTnJUE"
-    gsheet_ts_annotations <-
-      googlesheets::gs_key(sheet_key)
-    
     # Get corresponding annotated labels, and pair the start and end times of each label
+    Sys.sleep(6) # prevent "Too Many Requests (RFC 6585) (HTTP 429)" from GSheets
     gs_annotations <-
       gs_read(gsheet_ts_annotations, ws = ts_name)
     
-    # Sleep to prevent "Too Many Requests (RFC 6585) (HTTP 429)" from GSheets
-    Sys.sleep(5)
     if (typeof(gs_annotations$date.time) == "character") {
       gs_annotations$date.time <-
         as.POSIXct(strptime(gs_annotations$date.time, "%d/%m/%Y %H:%M:%S", tz = "Europe/London"))
@@ -240,9 +231,17 @@ ts_df <-
   system_data
 summary(ts_df)
 
+# GSheets auth and choose the spreadsheet
+googlesheets::gs_auth(token = "~/Work/ronan/shiny_app_google_sheet_token.rds")
+sheet_key <-
+  "1Y8MoUBi1CtzLNv0b_VPQS3MTAeapRE9ep5_7cMTnJUE"
+gsheet_ts_annotations <-
+  googlesheets::gs_key(sheet_key)
+
 ######################################################################################################
 # Clean all columns of ts_df using combined order labels
 
+# Skip missing data at start of ts
 ts_start <-
   as.POSIXct(strptime("2016-02-25 15:00:00", "%Y-%m-%d %H:%M:%S", tz = "Europe/London"))
 
@@ -251,17 +250,16 @@ clean_ts <-
     # For a given ts in ts_df, apply the cleaning process using Google labels, and return a cleaned ts
     ts_df[, c("date.time", col_name)] %>%
       setNames(c("date.time", "value")) %>%
-      clean_ts_data(get_labels_from_google_sheets(col_name, ts_start), ts_start) %>%
+      clean_ts_data(get_labels_from_google_sheets(col_name, ts_start),
+                    ts_start) %>%
       setNames(c("date.time.dupe", col_name))
   }
 
 clean_ts_df <-
-  names(ts_df[, -1]) %>%
-  lapply(
-    clean_ts,
-    ts_df,
-    ts_start
-  ) %>%
+  names(ts_df[,-1]) %>%
+  lapply(clean_ts,
+         ts_df,
+         ts_start) %>%
   bind_cols
 clean_ts_df[duplicated(names(clean_ts_df))] <-
   NULL
@@ -271,12 +269,24 @@ colnames(clean_ts_df)[1] <-
 ######################################################################################################
 # Generate ratios of orders vs. reqs and write tio NAB .csv's
 
+setwd("~/Work/NAB/")
+unlink(
+  c(
+    "./data/dataSet/*csv",
+    "./data/labels/*json",
+    "./data/labels/raw/*json"
+  ),
+  force = TRUE
+)
+
 # Mobile
 ts_name <-
   "mobile.orders.vs.reqs"
 ts_an <-
-  bind_rows(get_labels_from_google_sheets("mobile.orders", ts_start),
-            get_labels_from_google_sheets("mobile.reqs", ts_start)) %>%
+  bind_rows(
+    get_labels_from_google_sheets("mobile.orders", ts_start),
+    get_labels_from_google_sheets("mobile.reqs", ts_start)
+  ) %>%
   arrange(s_an, s_dt, s_ld)
 
 clean_ts_df %>%
@@ -288,8 +298,10 @@ clean_ts_df %>%
 ts_name <-
   "desktop.orders.vs.reqs"
 ts_an <-
-  bind_rows(get_labels_from_google_sheets("desktop.orders", ts_start),
-            get_labels_from_google_sheets("desktop.reqs", ts_start)) %>%
+  bind_rows(
+    get_labels_from_google_sheets("desktop.orders", ts_start),
+    get_labels_from_google_sheets("desktop.reqs", ts_start)
+  ) %>%
   arrange(s_an, s_dt, s_ld)
 
 clean_ts_df %>%
