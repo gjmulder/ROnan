@@ -70,20 +70,19 @@ clean_ts <-
 
 # Create subranges of time series using start and end of anomalies
 write_nab_sebsequences <-
-  function(ts, ts_name, ts_an) {
+  function(ts, ts_name, ts_an, ts_xreg) {
     # Output data as .csv and annotations as NAB json labels
     save_to_nab_csv <-
-      function(start_date_time, end_date_time, ts) {
+      function(start_date_time, end_date_time, ts, ts_xreg) {
         csv_data <-
           ts %>%
           filter(date.time > start_date_time &
                    date.time < end_date_time) %>%
           mutate(timestamp = strftime(date.time, format = "%F %T", tz = "Europe/London")) %>%
           select(timestamp, value)
-        
         summary(csv_data)
         
-        # Write .csv
+        # Write NAB .csv
         nab_data_fname <-
           paste0(
             "./data/dataSet/",
@@ -95,6 +94,26 @@ write_nab_sebsequences <-
             ".csv"
           )
         write_csv(csv_data, path = nab_data_fname)
+        
+        xreg_data <-
+          ts_xreg %>%
+          filter(date.time > start_date_time &
+                   date.time < end_date_time) %>%
+          select(-date.time)
+        summary(xreg_data)
+        
+        # Write xreg .csv
+        xreg_data_fname <-
+          paste0(
+            "./xreg/data/dataSet/",
+            ts_name,
+            "_",
+            as.integer(start_date_time),
+            "_",
+            as.integer(end_date_time),
+            ".csv"
+          )
+        write_csv(xreg_data, path = xreg_data_fname)
       }
     
     save_to_nab_json <-
@@ -163,9 +182,8 @@ write_nab_sebsequences <-
     # 5.   15% + 85% = time series subset
     
     subset_an_ranges <-
-      data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1],
-                 # end of last anomaly
-                 start.an = real_an$s_an[2:nrow(real_an)]) %>%             # start of next anomaly
+      data_frame(start.date.time = real_an$e_an[1:nrow(real_an) - 1], # end of last anomaly
+                 start.an = real_an$s_an[2:nrow(real_an)]) %>%        # start of next anomaly
       mutate(probationary.15pct.range = start.an - start.date.time) %>%
       mutate(detect.85pct.range = probationary.15pct.range * 85 / 15) %>%
       mutate(end.date.time = start.an + detect.85pct.range) %>%
@@ -175,7 +193,7 @@ write_nab_sebsequences <-
     # Write .csv data files
     subset_an_ranges %>%
       rowwise %>%
-      do(ts_range = save_to_nab_csv(.$start.date.time, .$end.date.time, ts))
+      do(ts_range = save_to_nab_csv(.$start.date.time, .$end.date.time, ts, ts_xreg))
     
     # Write raw label .json
     subset_an_ranges %>%
@@ -273,6 +291,7 @@ setwd("~/Work/NAB/")
 unlink(
   c(
     "./data/dataSet/*csv",
+    "./xreg/dataSet/*csv",
     "./data/labels/*json",
     "./data/labels/raw/*json",
     "./results/twitterADTs/dataSet/*.csv",
@@ -281,9 +300,24 @@ unlink(
   force = TRUE
 )
 
+ts_seasonal <-
+  # clean_ts_df %>%
+  ts_df %>%
+  mutate(
+    day.of.week = as.integer(strftime(
+      date.time, format = "%w", tz = "Europe/London"
+    )),
+    hour.of.day = as.integer(strftime(
+      date.time, format = "%H", tz = "GMT"
+    )),
+    min.of.hour = as.integer(strftime(
+      date.time, format = "%M", tz = "Europe/London"
+    ))
+  )
+
+######################################################################################################
 # Mobile
-ts_name <-
-  "mobile.orders.vs.reqs"
+
 ts_an <-
   bind_rows(
     get_labels_from_google_sheets("mobile.orders", ts_start),
@@ -292,16 +326,37 @@ ts_an <-
   # get_labels_from_google_sheets("mobile.orders", ts_start) %.%
   arrange(s_an, s_dt, s_ld)
 
-clean_ts_df %>%
-  mutate(value = mobile.orders / mobile.reqs) %>%
-  mutate(value = ifelse(is.nan(value) | is.infinite(value), 0.0, value)) %>%  # Handle division by 0
-  mutate(value = ifelse(value > 0.05, 0.05, value)) %>%                       # Cap ratios at 0.05 to prevent float overflow
-  select(date.time, value) %>%
-  write_nab_sebsequences(ts_name, ts_an)
-
-# Desktop
 ts_name <-
-  "desktop.orders.vs.reqs"
+  "mobile.orders.vs.reqs"
+
+xreg_col_names <-
+  c(
+    "date.time",
+    # "monitor1.uptime",
+    # "monitor2.uptime",
+    # "funds.in.success",
+    # "funds.in.fail",
+    # "login.success",
+    # "login.fail",
+    "desktop.orders",
+    # "mobile.orders"
+    "desktop.reqs",
+    "mobile.reqs",
+    "min.of.hour",
+    "hour.of.day",
+    "day.of.week"
+  )
+
+ts_seasonal %>%
+  mutate(value = mobile.orders / mobile.reqs) %>%
+  mutate(value = ifelse(is.na(value) | is.nan(value) | is.infinite(value), 0.0, value)) %>%  # Handle any missing values and division by 0
+  mutate(value = ifelse(value > 0.05, 0.05, value)) %>%                                      # Cap ratios at 0.05 to prevent float overflow
+  select(date.time, value) %>%
+  write_nab_sebsequences(ts_name, ts_an, ts_seasonal[, xreg_col_names])
+
+######################################################################################################
+# Desktop
+
 ts_an <-
   bind_rows(
     get_labels_from_google_sheets("desktop.orders", ts_start),
@@ -310,9 +365,30 @@ ts_an <-
   # get_labels_from_google_sheets("desktop.orders", ts_start) %>%
   arrange(s_an, s_dt, s_ld)
 
-clean_ts_df %>%
+ts_name <-
+  "desktop.orders.vs.reqs"
+
+xreg_col_names <-
+  c(
+    "date.time",
+    # "monitor1.uptime",
+    # "monitor2.uptime",
+    # "funds.in.success",
+    # "funds.in.fail",
+    # "login.success",
+    # "login.fail",
+    # "desktop.orders",
+    "mobile.orders",
+    "desktop.reqs",
+    "mobile.reqs",
+    "min.of.hour",
+    "hour.of.day",
+    "day.of.week"
+  )
+
+ts_seasonal %>%
   mutate(value = desktop.orders / desktop.reqs) %>%
-  mutate(value = ifelse(is.nan(value) | is.infinite(value), 0.0, value)) %>%  # Handle division by 0
-  mutate(value = ifelse(value > 0.05, 0.05, value)) %>%                       # Cap ratios at 0.05 to prevent float overflow
+  mutate(value = ifelse(is.na(value) | is.nan(value) | is.infinite(value), 0.0, value)) %>%  # Handle any missing values and division by 0
+  mutate(value = ifelse(value > 0.05, 0.05, value)) %>%                                      # Cap ratios at 0.05 to prevent float overflow
   select(date.time, value) %>%
-  write_nab_sebsequences(ts_name, ts_an)
+  write_nab_sebsequences(ts_name, ts_an, ts_seasonal[, xreg_col_names])
