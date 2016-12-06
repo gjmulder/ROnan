@@ -188,7 +188,8 @@ write_nab_sebsequences <-
       mutate(detect.85pct.range = probationary.15pct.range * 85 / 15) %>%
       mutate(end.date.time = start.an + detect.85pct.range) %>%
       filter(end.date.time <= max(ts$date.time)) %>%
-      filter((end.date.time - start.date.time) > as.difftime(14, units = "days"))
+      filter((end.date.time - start.date.time) > as.difftime(14, units = "days")) %>%
+      top_n(1, wt = probationary.15pct.range)
     
     # Write .csv data files
     subset_an_ranges %>%
@@ -301,8 +302,8 @@ unlink(
 )
 
 ts_seasonal <-
-  # clean_ts_df %>%
-  ts_df %>%
+  clean_ts_df %>%
+  # ts_df %>%
   mutate(
     day.of.week = as.integer(strftime(
       date.time, format = "%w", tz = "Europe/London"
