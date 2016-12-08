@@ -30,7 +30,7 @@ load_detect_save <-
     # skipFiles (list): file names to skip; useful in debugging.
     
     nnetarAD <-
-      function(p, ts_df, tz, do_plot = FALSE) {
+      function(size, ts_df, tz, do_plot = FALSE) {
         create_datetime_xreg <-
           function(ts_df) {
             xreg <-
@@ -48,37 +48,70 @@ load_detect_save <-
               ) %>%
               select(-timestamp, -value)
           }
-
+        
+        # Probationary training set
+        prob_idxs <-
+          1:round(nrow(ts_df) * 0.149)
+        ts_prob <-
+          ts_df[prob_idxs, ]
+        xreg_prob <-
+          create_datetime_xreg(ts_df[prob_idxs, ])
+        
+        p <-
+          3
+        # size <-
+        #   5
+        message("Training nnetar with size=", size, ", p=", p)
+        print(system.time(
+          nn_fit_prob <-
+            nnetar(
+              y = ts_prob$value,
+              p = p,
+              repeats = 1,
+              size = size,
+              xreg = xreg_prob,
+              MaxNWts = 1e5,
+              maxit = 1e8,
+              abstol = 1.0e-14,
+              reltol = 1.0e-16
+            )
+        ))
+        
+        message("Computing nnetar forecasts...")
+        nn_prob_forecast <-
+          forecast(nn_fit_prob, xreg = xreg_prob)
+        
+        message("Computing nnetar accuracy for probationary training ts...")
+        print(accuracy(nn_prob_forecast))
+        
+        message("Retraining nnetar with size=", size, ", p=", p)
         xreg <-
           create_datetime_xreg(ts_df)
-          
-        # p <-
-        #   10
-        size <-
-          5
-        message("Training nnetar with size=", size, ", p=", p)
         print(system.time(
           nn_fit <-
             nnetar(
               y = ts_df$value,
               p = p,
-              # repeats = 5,
+              repeats = 1,
               size = size,
-              MaxNWts = 10000,
-              xreg = xreg
+              xreg = xreg,
+              MaxNWts = 1e5,
+              maxit = 1e4,
+              abstol = 1.0e-6,
+              reltol = 1.0e-8,
+              Wts = nn_fit_prob$model[[1]]$wts
             )
         ))
-
-        message("Computing nnetar forecasts...")
+        
+        message("Computing nnetar probationary + amomaly forecasts...")
         nn_forecast <-
           forecast(nn_fit, xreg = xreg)
         
-        message("Computing nnetar accuracy...")
+        message("Computing nnetar accuracy for probationary + anomaly ts...")
         print(accuracy(nn_forecast))
         
         nn_forecast_values <-
           nn_forecast$fitted
-        
         point_smape <-
           abs(nn_forecast_values - ts_df$value) / abs(nn_forecast_values + ts_df$value)
         point_smape[is.na(point_smape)] <-
@@ -169,7 +202,7 @@ load_detect_save <-
       }
     
     runDetection <-
-      function(meta_param,
+      function(hyper_param,
                algorithmName,
                nab_data,
                filename,
@@ -210,7 +243,7 @@ load_detect_save <-
         } else if (algorithmName == "nnetarAD") {
           message(paste("Attempting detection w/ nnetarAD on ", filename))
           results <-
-            nnetarAD(meta_param, nab_data, tz, do_plot = FALSE)
+            nnetarAD(hyper_param, nab_data, tz, do_plot = FALSE)
         }
         
         message("Results...")
@@ -222,7 +255,7 @@ load_detect_save <-
       function(dFile,
                dDir,
                nabDataDir,
-               meta_param,
+               hyper_param,
                algorithmName,
                model_name,
                windows,
@@ -242,7 +275,7 @@ load_detect_save <-
         
         # Run the detector algorithm
         results <-
-          runDetection(meta_param,
+          runDetection(hyper_param,
                        algorithmName,
                        nab_data,
                        dFilePath,
@@ -348,37 +381,58 @@ load_detect_save <-
 
 
 ################################################################################
-meta_param_vec <-
-  # c(1:8 * 5)
-  # c(c(1:4, 8:5) * 10)
-  c(1)
-
+# Detection config hyper-param ranges
+path_to_NAB <-
+  "~/Work/NAB"
 tz <-
   "Europe/London"
 
-# cluster <-
-#   # makeCluster(detectCores() / 2)
-#   makeCluster(3)
-# 
-# clusterEvalQ(cluster, {
-#   library(jsonlite)
-#   library(forecast)
-#   library(tidyverse)
-#   library(AnomalyDetection)
-# })
+# twitterADTs, twitterADVec, nnetarAD
+algo_name <-
+  "nnetarAD"
+skip_files <-
+  NULL
 
-results <-
-  lapply(
-  # parLapplyLB(
-  #   cluster,
-    meta_param_vec,
-    load_detect_save,
-    algorithmName = "nnetarAD",
-    # twitterADTs, twitterADVec, nnetarAD
-    pathToNAB = "~/Work/NAB",
-    tz,
-    model_name = "lag-p",
-    skipFiles = NULL
-  )
+hyper_param_vec <-
+  # c(c(1:4, 8:5) * 10)
+  # c(10, 20, 30, 90, 80, 70, 40, 50, 60)
+  c(2, 3, 4, 5, 9, 8, 7, 6)
+  # c(1)
+model_name <-
+  "retrain-p3-size"
 
-# stopCluster(cluster)
+print(paste0("Hyper-params for model: ", model_name)
+      print(hyper_param_vec)
+if (length(hyper_param_vec > 2)) {
+  cluster <-
+    makeCluster(detectCores() / 2)
+  clusterEvalQ(cluster, {
+    library(jsonlite)
+    library(forecast)
+    library(tidyverse)
+    library(AnomalyDetection)
+  })
+  results <-
+    parLapplyLB(
+      cluster,
+      hyper_param_vec,
+      load_detect_save,
+      algorithmName = algo_name,
+      pathToNAB = path_to_NAB,
+      tz,
+      model_name = model_name,
+      skipFiles = skip_files
+    )
+  stopCluster(cluster)
+} else {
+  results <-
+    lapply(
+      hyper_param_vec,
+      load_detect_save,
+      algorithmName = algo_name,
+      pathToNAB = path_to_NAB,
+      tz,
+      model_name = model_name,
+      skipFiles = skip_files
+    )
+}
