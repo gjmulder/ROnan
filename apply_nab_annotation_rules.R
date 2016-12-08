@@ -320,11 +320,11 @@ ts_seasonal <-
 # Mobile
 
 ts_an <-
-  bind_rows(
-    get_labels_from_google_sheets("mobile.orders", ts_start),
-    get_labels_from_google_sheets("mobile.reqs", ts_start)
-  ) %>%
-  # get_labels_from_google_sheets("mobile.orders", ts_start) %.%
+  # bind_rows(
+  #   get_labels_from_google_sheets("mobile.orders", ts_start),
+  #   get_labels_from_google_sheets("mobile.reqs", ts_start)
+  # ) %>%
+  get_labels_from_google_sheets("mobile.orders", ts_start) %>%
   arrange(s_an, s_dt, s_ld)
 
 ts_name <-
@@ -359,11 +359,11 @@ ts_seasonal %>%
 # Desktop
 
 ts_an <-
-  bind_rows(
-    get_labels_from_google_sheets("desktop.orders", ts_start),
-    get_labels_from_google_sheets("desktop.reqs", ts_start)
-  ) %>%
-  # get_labels_from_google_sheets("desktop.orders", ts_start) %>%
+  # bind_rows(
+  #   get_labels_from_google_sheets("desktop.orders", ts_start),
+  #   get_labels_from_google_sheets("desktop.reqs", ts_start)
+  # ) %>%
+  get_labels_from_google_sheets("desktop.orders", ts_start) %>%
   arrange(s_an, s_dt, s_ld)
 
 ts_name <-

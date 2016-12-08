@@ -1,48 +1,48 @@
-# library(tidyverse)
-# library(googlesheets)
-# library(jsonlite)
-#
-# ######################################################################################################
-# # Load annotations from an .rdata file
-# # Assign whatever source data frame we want to examine to ts_df
-#
-# # System data
-# load('~/Work/DS/dataset1.Rdata')
+library(tidyverse)
+library(googlesheets)
+library(jsonlite)
+
+######################################################################################################
+# Load annotations from an .rdata file
+# Assign whatever source data frame we want to examine to ts_df
+
+# System data
+load('~/Work/DS/dataset1.Rdata')
+ts_df <-
+  system_data
+
+# # Cleaned system data
 # ts_df <-
-#   system_data
-#
-# # # Cleaned system data
-# # ts_df <-
-# #   clean_ts_df
-#
-# print(summary(ts_df))
-#
-# ######################################################################################################
-# # Google Sheets preparation
-# # n <- 5
-# # filler <- matrix("-", nrow = n, ncol = n,
-# #                  dimnames = list(NULL, paste0("V", seq_len(n))))
-#
-# ## prepare the OAuth token and set up the target sheet:
-# ##  - do this interactively
-# ##  - do this EXACTLY ONCE
-#
-# # shiny_token <- gs_auth() # authenticate w/ your desired Google identity here
-# # saveRDS(shiny_token, "shiny_app_google_sheet_token.rds")
-# # ss <- gs_new("ts_annotations",
-# #              row_extent = n, col_extent = n, input = filler)
-# # ss$sheet_key # 1Y8MoUBi1CtzLNv0b_VPQS3MTAeapRE9ep5_7cMTnJUE
-#
-# ## if you version control your app, don't forget to ignore the token file!
-# ## e.g., put it into .gitignore
-#
-# googlesheets::gs_auth(token = "~/Work/ronan/shiny_app_google_sheet_token.rds")
-# sheet_key <-
-#   "1Y8MoUBi1CtzLNv0b_VPQS3MTAeapRE9ep5_7cMTnJUE"
-# gsheet_ts_annotations <-
-#   googlesheets::gs_key(sheet_key)
-#
-# print(gs_ws_ls(gsheet_ts_annotations))
+#   clean_ts_df
+
+print(summary(ts_df))
+
+######################################################################################################
+# Google Sheets preparation
+# n <- 5
+# filler <- matrix("-", nrow = n, ncol = n,
+#                  dimnames = list(NULL, paste0("V", seq_len(n))))
+
+## prepare the OAuth token and set up the target sheet:
+##  - do this interactively
+##  - do this EXACTLY ONCE
+
+# shiny_token <- gs_auth() # authenticate w/ your desired Google identity here
+# saveRDS(shiny_token, "shiny_app_google_sheet_token.rds")
+# ss <- gs_new("ts_annotations",
+#              row_extent = n, col_extent = n, input = filler)
+# ss$sheet_key # 1Y8MoUBi1CtzLNv0b_VPQS3MTAeapRE9ep5_7cMTnJUE
+
+## if you version control your app, don't forget to ignore the token file!
+## e.g., put it into .gitignore
+
+googlesheets::gs_auth(token = "~/Work/ronan/shiny_app_google_sheet_token.rds")
+sheet_key <-
+  "1Y8MoUBi1CtzLNv0b_VPQS3MTAeapRE9ep5_7cMTnJUE"
+gsheet_ts_annotations <-
+  googlesheets::gs_key(sheet_key)
+
+print(gs_ws_ls(gsheet_ts_annotations))
 #
 # ###################################################################################################
 # # Generate some reoccuring labels
@@ -167,76 +167,76 @@
 #   lapply(1, var_fits)
 #
 ###################################################################################################
-library(forecast)
-
-ts_seasonal <-
-  clean_ts_df %>%
-  mutate(
-    min.of.hour = as.integer(strftime(
-      date.time, format = "%M", tz = "Europe/London"
-    )),
-    hour.of.day = as.integer(strftime(
-      date.time, format = "%H", tz = "GMT"
-    )),
-    day.of.week = as.integer(strftime(
-      date.time, format = "%w", tz = "Europe/London"
-    ))
-  )
-
-col_names <-
-  c(
-    # "date.time",
-    # "monitor1.uptime",
-    # "monitor2.uptime",
-    # "funds.in.success",
-    # "funds.in.fail",
-    # "login.success",
-    # "login.fail",
-    "desktop.orders",
-    # "mobile.orders"
-    "desktop.reqs",
-    "mobile.reqs",
-    "min.of.hour",
-    "hour.of.day",
-    "day.of.week"
-  )
-
-ts_test <-
-  ts_seasonal %>%
-  filter(date.time > as.POSIXct(
-    strptime("2016-02-25 15:00:00", "%Y-%m-%d %H:%M:%S", tz = "Europe/London")
-  ))
-
-ts_train <-
-  ts_seasonal %>%
-  filter(date.time < as.POSIXct(
-    strptime("2016-02-16 15:00:00", "%Y-%m-%d %H:%M:%S", tz = "Europe/London")
-  ))
-
-set.seed(666)
-
-run_nn_fit <-
-  function(ts_train, ts_test, col_names) {
-    print(system.time(
-      nn_fit <-
-        nnetar(
-          ts_train$mobile.orders,
-          repeats = 50,
-          size = 25,
-          xreg = ts_train[, col_names],
-          MaxNWts = 12000
-        )
-    ))
-    
-    print(system.time(acc_nn <-
-                        accuracy(
-                          forecast(nn_fit, xreg = ts_test[, col_names]), ts_test$mobile.orders
-                        )))
-    print(acc_nn)
-    acc_nn
-  }
-
-acc_nn <-
-  run_nn_fit(ts_train, ts_test, col_names)
-# acc_nns <-
-#   lapply(1:10 * 5, run_nn_fit)
+# library(forecast)
+# 
+# ts_seasonal <-
+#   clean_ts_df %>%
+#   mutate(
+#     min.of.hour = as.integer(strftime(
+#       date.time, format = "%M", tz = "Europe/London"
+#     )),
+#     hour.of.day = as.integer(strftime(
+#       date.time, format = "%H", tz = "GMT"
+#     )),
+#     day.of.week = as.integer(strftime(
+#       date.time, format = "%w", tz = "Europe/London"
+#     ))
+#   )
+# 
+# col_names <-
+#   c(
+#     # "date.time",
+#     # "monitor1.uptime",
+#     # "monitor2.uptime",
+#     # "funds.in.success",
+#     # "funds.in.fail",
+#     # "login.success",
+#     # "login.fail",
+#     "desktop.orders",
+#     # "mobile.orders"
+#     "desktop.reqs",
+#     "mobile.reqs",
+#     "min.of.hour",
+#     "hour.of.day",
+#     "day.of.week"
+#   )
+# 
+# ts_test <-
+#   ts_seasonal %>%
+#   filter(date.time > as.POSIXct(
+#     strptime("2016-02-25 15:00:00", "%Y-%m-%d %H:%M:%S", tz = "Europe/London")
+#   ))
+# 
+# ts_train <-
+#   ts_seasonal %>%
+#   filter(date.time < as.POSIXct(
+#     strptime("2016-02-16 15:00:00", "%Y-%m-%d %H:%M:%S", tz = "Europe/London")
+#   ))
+# 
+# set.seed(666)
+# 
+# run_nn_fit <-
+#   function(ts_train, ts_test, col_names) {
+#     print(system.time(
+#       nn_fit <-
+#         nnetar(
+#           ts_train$mobile.orders,
+#           repeats = 50,
+#           size = 25,
+#           xreg = ts_train[, col_names],
+#           MaxNWts = 12000
+#         )
+#     ))
+#     
+#     print(system.time(acc_nn <-
+#                         accuracy(
+#                           forecast(nn_fit, xreg = ts_test[, col_names]), ts_test$mobile.orders
+#                         )))
+#     print(acc_nn)
+#     acc_nn
+#   }
+# 
+# acc_nn <-
+#   run_nn_fit(ts_train, ts_test, col_names)
+# # acc_nns <-
+# #   lapply(1:10 * 5, run_nn_fit)

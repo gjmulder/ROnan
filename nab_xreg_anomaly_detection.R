@@ -10,8 +10,8 @@
 
 # library(methods)
 # library(AnomalyDetection)
-# library(jsonlite)
-# library(forecast)
+library(jsonlite)
+library(forecast)
 library(parallel)
 library(tidyverse)
 
@@ -30,52 +30,74 @@ load_detect_save <-
     # skipFiles (list): file names to skip; useful in debugging.
     
     nnetarAD <-
-      function(size, ts_df, tz, do_plot = FALSE) {
+      function(p, ts_df, tz, do_plot = FALSE) {
+        create_datetime_xreg <-
+          function(ts_df) {
+            xreg <-
+              ts_df %>%
+              mutate(
+                day.of.week = as.integer(strftime(
+                  timestamp, format = "%w", tz = "Europe/London"
+                )),
+                hour.of.day = as.integer(strftime(
+                  timestamp, format = "%H", tz = "Europe/London"
+                )),
+                min.of.hour = as.integer(strftime(
+                  timestamp, format = "%M", tz = "Europe/London"
+                ))
+              ) %>%
+              select(-timestamp, -value)
+          }
+
         xreg <-
-          ts_df %>%
-          mutate(
-            day.of.week = as.integer(strftime(
-              timestamp, format = "%w", tz = "Europe/London"
-            )),
-            hour.of.day = as.integer(strftime(
-              timestamp, format = "%H", tz = "Europe/London"
-            )),
-            min.of.hour = as.integer(strftime(
-              timestamp, format = "%M", tz = "Europe/London"
-            ))
-          ) %>%
-          select(-timestamp)
-        
-        message("Training nnetar with size: ", size)
+          create_datetime_xreg(ts_df)
+          
+        # p <-
+        #   10
+        size <-
+          5
+        message("Training nnetar with size=", size, ", p=", p)
         print(system.time(
           nn_fit <-
             nnetar(
               y = ts_df$value,
-              # p = p,
+              p = p,
               # repeats = 5,
               size = size,
               MaxNWts = 10000,
               xreg = xreg
             )
         ))
-        message("Computing nnetar accuracy...")
-        print(accuracy(nn_fit))
-        
-        message("Computing nnetar forecast...")
+
+        message("Computing nnetar forecasts...")
         nn_forecast <-
-          as.numeric(forecast(nn_fit, xreg = xreg)$fitted)
+          forecast(nn_fit, xreg = xreg)
+        
+        message("Computing nnetar accuracy...")
+        print(accuracy(nn_forecast))
+        
+        nn_forecast_values <-
+          nn_forecast$fitted
+        
+        point_smape <-
+          abs(nn_forecast_values - ts_df$value) / abs(nn_forecast_values + ts_df$value)
+        point_smape[is.na(point_smape)] <-
+          0.0
+        normalised_point_smape <-
+          point_smape / max(point_smape)
         
         if (do_plot) {
           fitted_df <-
             data_frame(
               timestamp = ts_df$timestamp,
-              forecast_y = nn_forecast,
-              actual_y = ts_df$value
+              # point_smape = normalised_point_smape,
+              forecast_y = nn_forecast_values / max(nn_forecast_values) - min(nn_forecast_values),
+              actual_y = ts_df$value / max(ts_df$value) - min(ts_df$value)
             ) %>%
             gather(series, value, actual_y, forecast_y)
           gg <-
             ggplot() +
-            ggtitle(paste0("nnetarAD, size = ", size)) +
+            ggtitle(paste0("nnetarAD, size=", size, ", p=", p)) +
             geom_line(
               data = fitted_df,
               aes(
@@ -86,18 +108,10 @@ load_detect_save <-
               size = 0.2,
               alpha = 0.4
             ) +
-            scale_colour_manual(values = c("black", "gold")) +
+            scale_colour_manual(values = c("black", "gold", "green")) +
             guides(colour = guide_legend(override.aes = list(size = 2, alpha = 1)))
           print(gg)
         }
-        
-        point_smape <-
-          abs(nn_forecast - ts_df$value) / abs(nn_forecast + ts_df$value)
-        
-        point_smape[is.na(point_smape)] <-
-          0.0
-        normalised_point_smape <-
-          point_smape / max(point_smape)
         
         data.frame(anoms = normalised_point_smape)
       }
@@ -196,7 +210,7 @@ load_detect_save <-
         } else if (algorithmName == "nnetarAD") {
           message(paste("Attempting detection w/ nnetarAD on ", filename))
           results <-
-            nnetarAD(meta_param, nab_data, tz, do_plot = TRUE)
+            nnetarAD(meta_param, nab_data, tz, do_plot = FALSE)
         }
         
         message("Results...")
@@ -239,6 +253,8 @@ load_detect_save <-
           addDetections(nab_data, results, algorithmName, tz)
         nab_data <-
           addLabels(nab_data, windows[[dataName]])
+        print("Results summary:")
+        print(summary(nab_data))
         
         # Write results to csv
         dir.create(paste(resultsDir, dDir, sep = "/"),
@@ -333,31 +349,36 @@ load_detect_save <-
 
 ################################################################################
 meta_param_vec <-
-  c(1:8 * 5)
+  # c(1:8 * 5)
+  # c(c(1:4, 8:5) * 10)
+  c(1)
 
 tz <-
   "Europe/London"
 
-cluster <-
-  makeCluster(detectCores() / 2)
-
-clusterEvalQ(cluster, {
-  library(jsonlite)
-  library(forecast)
-  library(tidyverse)
-})
+# cluster <-
+#   # makeCluster(detectCores() / 2)
+#   makeCluster(3)
+# 
+# clusterEvalQ(cluster, {
+#   library(jsonlite)
+#   library(forecast)
+#   library(tidyverse)
+#   library(AnomalyDetection)
+# })
 
 results <-
-  parLapplyLB(
-    cluster,
+  lapply(
+  # parLapplyLB(
+  #   cluster,
     meta_param_vec,
     load_detect_save,
     algorithmName = "nnetarAD",
     # twitterADTs, twitterADVec, nnetarAD
     pathToNAB = "~/Work/NAB",
     tz,
-    model_name = "hidden-size",
+    model_name = "lag-p",
     skipFiles = NULL
   )
 
-stopCluster(cluster)
+# stopCluster(cluster)
