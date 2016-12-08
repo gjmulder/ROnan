@@ -30,7 +30,7 @@ load_detect_save <-
     # skipFiles (list): file names to skip; useful in debugging.
     
     nnetarAD <-
-      function(size, ts_df, tz, do_plot = FALSE) {
+      function(maxit, ts_df, tz, do_plot = FALSE) {
         create_datetime_xreg <-
           function(ts_df) {
             xreg <-
@@ -46,45 +46,42 @@ load_detect_save <-
                   timestamp, format = "%M", tz = "Europe/London"
                 ))
               ) %>%
-              select(-timestamp, -value)
+              select(-timestamp,-value)
           }
         
         # Probationary training set
         prob_idxs <-
           1:round(nrow(ts_df) * 0.149)
         ts_prob <-
-          ts_df[prob_idxs, ]
+          ts_df[prob_idxs,]
         xreg_prob <-
-          create_datetime_xreg(ts_df[prob_idxs, ])
+          create_datetime_xreg(ts_df[prob_idxs,])
         
         p <-
-          3
-        # size <-
-        #   5
+          1
+        size <-
+          4
+        repeats <-
+          5
         message("Training nnetar with size=", size, ", p=", p)
         print(system.time(
           nn_fit_prob <-
             nnetar(
               y = ts_prob$value,
               p = p,
-              repeats = 1,
+              repeats = repeats,
               size = size,
               xreg = xreg_prob,
               MaxNWts = 1e5,
-              maxit = 1e8,
+              maxit = maxit * 1e4,
               abstol = 1.0e-14,
               reltol = 1.0e-16
             )
         ))
+        nn_prob_accuracy <-
+          accuracy(forecast(nn_fit_prob, xreg = xreg_prob))
         
-        message("Computing nnetar forecasts...")
-        nn_prob_forecast <-
-          forecast(nn_fit_prob, xreg = xreg_prob)
-        
-        message("Computing nnetar accuracy for probationary training ts...")
-        print(accuracy(nn_prob_forecast))
-        
-        message("Retraining nnetar with size=", size, ", p=", p)
+        message("Retraining nnetar with size=", size, ", p=", p, ", maxit=", maxit)
         xreg <-
           create_datetime_xreg(ts_df)
         print(system.time(
@@ -92,24 +89,27 @@ load_detect_save <-
             nnetar(
               y = ts_df$value,
               p = p,
-              repeats = 1,
+              repeats = repeats,
               size = size,
               xreg = xreg,
               MaxNWts = 1e5,
-              maxit = 1e4,
+              maxit = maxit,
               abstol = 1.0e-6,
               reltol = 1.0e-8,
               Wts = nn_fit_prob$model[[1]]$wts
             )
         ))
-        
-        message("Computing nnetar probationary + amomaly forecasts...")
         nn_forecast <-
           forecast(nn_fit, xreg = xreg)
+        nn_accuracy <-
+          accuracy(nn_forecast)
         
-        message("Computing nnetar accuracy for probationary + anomaly ts...")
-        print(accuracy(nn_forecast))
-        
+        # Check to see how much reduction in accuracy the retraining has caused on the probationary ts
+        nn_prob_new_accuracy <-
+          accuracy(forecast(nn_fit, xreg = xreg_prob))
+
+        save(nn_fit_prob, nn_prob_accuracy, nn_fit, nn_accuracy, file = paste0("maxit-", maxit, ".Rdata"))
+
         nn_forecast_values <-
           nn_forecast$fitted
         point_smape <-
@@ -171,7 +171,7 @@ load_detect_save <-
                   detections$anoms[i, 1]
               }
               
-              anomalyDataFrame[idx, ]$anomaly_score <-
+              anomalyDataFrame[idx,]$anomaly_score <-
                 1.0
             }
           }
@@ -194,7 +194,7 @@ load_detect_save <-
               anomalyDataFrame$timestamp <= upper
             idx[is.na(idx)] <-
               FALSE
-            anomalyDataFrame[idx, ]$label <-
+            anomalyDataFrame[idx,]$label <-
               1
           }
         }
@@ -396,16 +396,17 @@ skip_files <-
 hyper_param_vec <-
   # c(c(1:4, 8:5) * 10)
   # c(10, 20, 30, 90, 80, 70, 40, 50, 60)
-  c(2, 3, 4, 5, 9, 8, 7, 6)
-  # c(1)
+  c(1000, 10000, 100000, 1000000)
+# c(1)
 model_name <-
-  "retrain-p3-size"
+  "retrain-rep5-p1-size4-maxit"
 
-print(paste0("Hyper-params for model: ", model_name)
-      print(hyper_param_vec)
-if (length(hyper_param_vec > 2)) {
+print(paste0("Hyper-params for model: ", model_name))
+print(hyper_param_vec)
+if (length(hyper_param_vec) > 2) {
   cluster <-
-    makeCluster(detectCores() / 2)
+    makeCluster(detectCores() / 2,
+                outfile = "")
   clusterEvalQ(cluster, {
     library(jsonlite)
     library(forecast)
