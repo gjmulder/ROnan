@@ -32,27 +32,44 @@ load_detect_save <-
     nnetarAD <-
       function(p, ts_df, tz, do_plot = FALSE) {
         create_datetime_xreg <-
-          function(ts_df) {
+          function(ts_df, sd_limit = 1e-3) {
             xreg <-
               ts_df %>%
               mutate(
-                day.of.week = as.integer(strftime(
+                year = as.integer(strftime(
+                  timestamp, format = "%Y", tz = tz
+                )),
+                month = as.integer(strftime(
+                  timestamp, format = "%m", tz = tz
+                )),
+                week = as.integer(strftime(
+                  timestamp, format = "%U", tz = tz
+                )),
+                day = as.integer(strftime(
                   timestamp, format = "%w", tz = tz
                 )),
-                hour.of.day = as.integer(strftime(
+                hour = as.integer(strftime(
                   timestamp, format = "%H", tz = tz
                 )),
-                min.of.hour = as.integer(strftime(
+                minute = as.integer(strftime(
                   timestamp, format = "%M", tz = tz
                 ))
               ) %>%
               select(-timestamp, -value) %>%
+              # select_if(c(sd(.$year) > sd_limit,
+              #             sd(.$month) > sd_limit,
+              #             sd(.$week) > sd_limit,
+              #             sd(.$day) > sd_limit,
+              #             sd(.$hour) > sd_limit,
+              #             sd(.$minute) > sd_limit)) %>%
               select_if(colSums(!is.na(.)) > 0)
           }
         
         # # No anomalies if S.D. is small
-        # if (sd(ts_df$value) < 1e-3)
-        #   return(data.frame(anoms = NULL))
+        sd_limit <-
+          1e-3
+        if (sd(ts_df$value) < sd_limit)
+          return(data.frame(anoms = NULL))
         
         # Probationary training set
         prob_idxs <-
@@ -60,14 +77,14 @@ load_detect_save <-
         ts_prob <-
           ts_df[prob_idxs,]
         xreg_prob <-
-          create_datetime_xreg(ts_df[prob_idxs,])
+          create_datetime_xreg(ts_df[prob_idxs,], sd_limit = sd_limit)
         
         # p <-
         #   10
         size <-
           4
         repeats <-
-          10
+          1
         maxit <-
           1e4
         
@@ -84,15 +101,17 @@ load_detect_save <-
               MaxNWts = 1e5,
               maxit = maxit * 1e4,
               abstol = 1.0e-14,
-              reltol = 1.0e-16
+              reltol = 1.0e-16,
+              scale.inputs = FALSE
             )
         ))
         nn_prob_accuracy <-
           accuracy(forecast(nn_fit_prob, xreg = xreg_prob))
+        print("Probationary accuracy:")
         print(nn_prob_accuracy)
         message("Retraining nnetar with size=", size, ", p=", p, ", maxit=", maxit)
         xreg <-
-          create_datetime_xreg(ts_df)
+          create_datetime_xreg(ts_df, sd_limit)
         print(system.time(
           nn_fit <-
             nnetar(
@@ -105,6 +124,7 @@ load_detect_save <-
               maxit = maxit,
               abstol = 1.0e-6,
               reltol = 1.0e-8,
+              scale.inputs = FALSE,
               Wts = nn_fit_prob$model[[1]]$wts
             )
         ))
@@ -112,11 +132,8 @@ load_detect_save <-
           forecast(nn_fit, xreg = xreg)
         nn_accuracy <-
           accuracy(nn_forecast)
+        print("Probationary+anomaly accuracy:")
         print(nn_accuracy)
-        
-        # Check to see how much reduction in accuracy the retraining has caused on the probationary ts
-        nn_prob_new_accuracy <-
-          accuracy(forecast(nn_fit, xreg = xreg_prob))
         
         # save(nn_fit_prob, nn_prob_accuracy, nn_fit, nn_accuracy, file = paste0("maxit-", maxit, ".Rdata"))
         
@@ -395,24 +412,49 @@ load_detect_save <-
 path_to_NAB <-
   "~/Work/NAB"
 tz <-
-  "Europe/London"
+  #   "Europe/London"
+  "GMT"
 
 # twitterADTs, twitterADVec, nnetarAD
 algo_name <-
   "nnetarAD"
 skip_files <-
-  NULL
-  # c("art_daily_no_noise.csv",
-  #   "art_daily_perfect_square_wave.csv",
-  #   "art_daily_small_noise.csv",
-  #   "art_flatline.csv",
-  #   "art_noisy.csv",
-  #   "art_daily_flatmiddle.csv",
-  #   "art_daily_jumpsdown.csv",
-  #   "art_daily_jumpsup.csv",
-  #   "art_daily_nojump.csv",
-  #   "art_increase_spike_density.csv",
-  #   "art_load_balancer_spikes.csv")
+  # NULL
+  c("art_daily_no_noise.csv",
+    "art_daily_perfect_square_wave.csv",
+    "art_daily_small_noise.csv",
+    "art_flatline.csv",
+    "art_noisy.csv",
+    "art_daily_flatmiddle.csv",
+    "art_daily_jumpsdown.csv",
+    "art_daily_jumpsup.csv",
+    "art_daily_nojump.csv",
+    "art_increase_spike_density.csv",
+    "art_load_balancer_spikes.csv",
+    "exchange-2_cpc_results.csv",
+    "exchange-2_cpm_results.csv",
+    "exchange-3_cpc_results.csv",
+    "exchange-3_cpm_results.csv",
+    "exchange-4_cpc_results.csv",
+    "exchange-4_cpm_results.csv",
+    "ec2_cpu_utilization_24ae8d.csv",
+    "ec2_cpu_utilization_53ea38.csv",
+    "ec2_cpu_utilization_5f5533.csv",
+    "ec2_cpu_utilization_77c1ca.csv",
+    "ec2_cpu_utilization_825cc2.csv",
+    "ec2_cpu_utilization_ac20cd.csv",
+    "ec2_cpu_utilization_c6585a.csv",
+    "ec2_cpu_utilization_fe7f93.csv",
+    "ec2_disk_write_bytes_1ef3de.csv",
+    "ec2_disk_write_bytes_c0d644.csv",
+    "ec2_network_in_257a54.csv",
+    "ec2_network_in_5abac7.csv",
+    "elb_request_count_8c0756.csv",
+    "grok_asg_anomaly.csv",
+    "iio_us-east-1_i-a2eb1cd9_NetworkIn.csv",
+    "rds_cpu_utilization_cc0c53.csv",
+    "rds_cpu_utilization_e47b3b.csv"
+  )
 
 hyper_param_vec <-
   # c(c(1:4, 8:5) * 10)
