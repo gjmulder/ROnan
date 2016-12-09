@@ -30,24 +30,29 @@ load_detect_save <-
     # skipFiles (list): file names to skip; useful in debugging.
     
     nnetarAD <-
-      function(maxit, ts_df, tz, do_plot = FALSE) {
+      function(p, ts_df, tz, do_plot = FALSE) {
         create_datetime_xreg <-
           function(ts_df) {
             xreg <-
               ts_df %>%
               mutate(
                 day.of.week = as.integer(strftime(
-                  timestamp, format = "%w", tz = "Europe/London"
+                  timestamp, format = "%w", tz = tz
                 )),
                 hour.of.day = as.integer(strftime(
-                  timestamp, format = "%H", tz = "Europe/London"
+                  timestamp, format = "%H", tz = tz
                 )),
                 min.of.hour = as.integer(strftime(
-                  timestamp, format = "%M", tz = "Europe/London"
+                  timestamp, format = "%M", tz = tz
                 ))
               ) %>%
-              select(-timestamp,-value)
+              select(-timestamp, -value) %>%
+              select_if(colSums(!is.na(.)) > 0)
           }
+        
+        # # No anomalies if S.D. is small
+        # if (sd(ts_df$value) < 1e-3)
+        #   return(data.frame(anoms = NULL))
         
         # Probationary training set
         prob_idxs <-
@@ -57,13 +62,17 @@ load_detect_save <-
         xreg_prob <-
           create_datetime_xreg(ts_df[prob_idxs,])
         
-        p <-
-          1
+        # p <-
+        #   10
         size <-
           4
         repeats <-
-          5
-        message("Training nnetar with size=", size, ", p=", p)
+          10
+        maxit <-
+          1e4
+        
+        message("Training nnetar with size=", size, ", p=", p, ", maxit*1e4=", maxit * 1e4)
+        set.seed(666)
         print(system.time(
           nn_fit_prob <-
             nnetar(
@@ -80,7 +89,7 @@ load_detect_save <-
         ))
         nn_prob_accuracy <-
           accuracy(forecast(nn_fit_prob, xreg = xreg_prob))
-        
+        print(nn_prob_accuracy)
         message("Retraining nnetar with size=", size, ", p=", p, ", maxit=", maxit)
         xreg <-
           create_datetime_xreg(ts_df)
@@ -103,13 +112,14 @@ load_detect_save <-
           forecast(nn_fit, xreg = xreg)
         nn_accuracy <-
           accuracy(nn_forecast)
+        print(nn_accuracy)
         
         # Check to see how much reduction in accuracy the retraining has caused on the probationary ts
         nn_prob_new_accuracy <-
           accuracy(forecast(nn_fit, xreg = xreg_prob))
-
-        save(nn_fit_prob, nn_prob_accuracy, nn_fit, nn_accuracy, file = paste0("maxit-", maxit, ".Rdata"))
-
+        
+        # save(nn_fit_prob, nn_prob_accuracy, nn_fit, nn_accuracy, file = paste0("maxit-", maxit, ".Rdata"))
+        
         nn_forecast_values <-
           nn_forecast$fitted
         point_smape <-
@@ -392,26 +402,39 @@ algo_name <-
   "nnetarAD"
 skip_files <-
   NULL
+  # c("art_daily_no_noise.csv",
+  #   "art_daily_perfect_square_wave.csv",
+  #   "art_daily_small_noise.csv",
+  #   "art_flatline.csv",
+  #   "art_noisy.csv",
+  #   "art_daily_flatmiddle.csv",
+  #   "art_daily_jumpsdown.csv",
+  #   "art_daily_jumpsup.csv",
+  #   "art_daily_nojump.csv",
+  #   "art_increase_spike_density.csv",
+  #   "art_load_balancer_spikes.csv")
 
 hyper_param_vec <-
   # c(c(1:4, 8:5) * 10)
   # c(10, 20, 30, 90, 80, 70, 40, 50, 60)
-  c(1000, 10000, 100000, 1000000)
-# c(1)
+  # c(1000, 10000, 100000, 1000000)
+  # c(2)
+  c(1)
+
 model_name <-
-  "retrain-rep5-p1-size4-maxit"
+  "nab-data"
 
 print(paste0("Hyper-params for model: ", model_name))
 print(hyper_param_vec)
 if (length(hyper_param_vec) > 2) {
   cluster <-
     makeCluster(detectCores() / 2,
-                outfile = "")
+                outfile = "~/Work/ronan/nnetar_cluster.txt")
   clusterEvalQ(cluster, {
     library(jsonlite)
     library(forecast)
     library(tidyverse)
-    library(AnomalyDetection)
+    # library(AnomalyDetection)
   })
   results <-
     parLapplyLB(
